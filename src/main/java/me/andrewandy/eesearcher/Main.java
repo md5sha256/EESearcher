@@ -1,7 +1,11 @@
 package me.andrewandy.eesearcher;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
-import java.util.StringJoiner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -14,7 +18,35 @@ public class Main {
 
 
     public static void main(String[] args) {
-        testTitles();
+        System.out.println("--- Start ---");
+
+        final File file = new File("ee.pdf");
+        if (!file.exists()) {
+            System.out.println("No file found!");
+            return;
+        }
+        final List<String> textByPage;
+        long temp = System.currentTimeMillis();
+        System.out.println("Loading pdf into memory; parsing text...");
+        try {
+            textByPage = Parser.parseTextByPage(Parser.parseDocument(new FileInputStream(file)));
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            System.out.println("Failed to parse text from source.");
+            return;
+        }
+        System.out.println("Parsed text in " + (System.currentTimeMillis() - temp) + "ms");
+        System.out.println("Parsing keywords...");
+        temp = System.currentTimeMillis();
+        final KeywordFinder finder = new KeywordFinder();
+        textByPage.forEach((s) -> finder.count(s, false));
+        final Map<String, Integer> map = finder.getResults();
+        final List<String> processed = finder.getProcessedResults();
+        for (String s : processed) {
+            System.out.println("Word: " + s + " | Number of Ocurrences: "  + map.get(s));
+        }
+        System.out.println("Parsed keywords in " + (System.currentTimeMillis() - temp) + "ms");
+        System.out.println("--- End ---");
     }
 
     private static void testTitles() {
