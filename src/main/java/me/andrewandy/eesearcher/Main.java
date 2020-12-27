@@ -18,6 +18,10 @@ public class Main {
 
 
     public static void main(String[] args) {
+      FileImporter.main(args);
+    }
+
+    private void a() {
         System.out.println("--- Start ---");
 
         final File file = new File("ee.pdf");
