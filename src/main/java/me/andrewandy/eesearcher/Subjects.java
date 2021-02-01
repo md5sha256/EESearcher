@@ -2,7 +2,7 @@ package me.andrewandy.eesearcher;
 
 public final class Subjects {
 
-    private static final SubjectRegistry registryInstance = new SubjectRegistry();
+    private static final SubjectDatabase registryInstance = new SubjectDatabase();
 
     // Group 1 (Language)
 
@@ -40,7 +40,7 @@ public final class Subjects {
 
     }
 
-    public static SubjectRegistry getSubjectRegistry() {
+    public static SubjectDatabase getSubjectRegistry() {
         return registryInstance;
     }
 

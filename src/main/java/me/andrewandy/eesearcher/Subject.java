@@ -1,12 +1,13 @@
 package me.andrewandy.eesearcher;
 
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public final class Subject {
+public final class Subject implements Serializable {
 
     private final boolean isActive;
     private final byte group;
