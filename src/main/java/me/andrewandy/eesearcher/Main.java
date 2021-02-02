@@ -1,7 +1,6 @@
 package me.andrewandy.eesearcher;
 
-import me.andrewandy.eesearcher.ui.MainMenu;
-import me.andrewandy.eesearcher.ui.Picker;
+import me.andrewandy.eesearcher.ui.LoginWindow;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -21,7 +20,7 @@ public class Main {
 
 
     public static void main(String[] args) {
-        MainMenu.main(args);
+        LoginWindow.main(args);
     }
 
     private void a() {
