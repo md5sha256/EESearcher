@@ -23,7 +23,7 @@ public class Main {
         LoginWindow.main(args);
     }
 
-    private void a() {
+    private void parseText() {
         System.out.println("--- Start ---");
 
         final File file = new File("ee.pdf");

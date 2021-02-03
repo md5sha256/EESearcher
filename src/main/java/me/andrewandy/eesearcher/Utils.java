@@ -18,8 +18,8 @@ public class Utils {
         return false;
     }
 
-    public static void isValidPDF(final Path path) {
-        isValidPDF(path.toFile());
+    public static boolean isValidPDF(final Path path) {
+        return isValidPDF(path.toFile());
     }
 
 }
