@@ -3,18 +3,21 @@ package me.andrewandy.eesearcher.ui;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
-import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import me.andrewandy.eesearcher.Authenticator;
-import me.andrewandy.eesearcher.SearchHistoryController;
+import org.jetbrains.annotations.NotNull;
 
 public class PageFactoryImpl implements PageFactory {
 
     public static Border DEF_BORDER = new Border(new BorderStroke(Color.BLACK,
             BorderStrokeStyle.SOLID, CornerRadii.EMPTY, BorderWidths.DEFAULT));
 
-    public Parent newLoginPage(Authenticator authenticator, double width, double height, Insets insets, final Runnable onSuccess, final Runnable onCancel) {
+    public @NotNull Parent newLoginPage(@NotNull Authenticator authenticator, double width, double height, @NotNull Insets insets, final @NotNull Runnable onSuccess, final @NotNull Runnable onCancel) {
         final GridPane root = new GridPane();
         root.setPadding(insets);
         root.setPrefSize(width, height);

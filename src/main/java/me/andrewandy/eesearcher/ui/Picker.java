@@ -5,10 +5,10 @@ import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListView;
-import javafx.scene.control.SelectionMode;
+import javafx.scene.control.*;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.TilePane;
 import javafx.scene.layout.VBox;
@@ -16,19 +16,34 @@ import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
-import java.awt.*;
 import java.io.File;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class Picker extends Application {
 
-    private final Desktop desktop = Desktop.getDesktop();
-
-    private final List<File> files = new LinkedList<>();
+    // Cached so we have O(1) lookup times as opposed to a ListView#getItems's O(n) lookup
     private final Set<File> fileCache = new HashSet<>();
+
+    // UI Variables
+    private final VBox listBox = new VBox();
+    private final VBox rootGroup = new VBox(12);
+    private final GridPane pane = new GridPane();
+    private final ListView<File> listView = new ListView<>();
+    private final Button buttonAdd = new Button("Add");
+    private final Button buttonRemove = new Button("Delete");
+    private final Button buttonMoveUp = new Button("Move Up");
+    private final Button buttonMoveDown = new Button("Move Down");
+    private final Button buttonClearSel = new Button("Clear Selection");
+    private final TilePane paneEditFiles = new TilePane();
+    private final Label listLabel = new Label("Selected EEs");
+    private final Label status = new Label(" ");
+    private final Label info = new Label("Select files by dragging and dropping or importing.");
+
+    // Lazy init for when #start is called
+    private Stage stage;
+
+    // Stateful variables
+    private SelectionState selectionState = SelectionState.EMPTY;
 
     public static void main(String[] args) {
         launch(args);
@@ -41,85 +56,149 @@ public class Picker extends Application {
                 new FileChooser.ExtensionFilter("All Files", "*.*"));
     }
 
-    public List<File> getPickedFiles() {
-        return files;
+
+    private static void enableButton(final Button... buttons) {
+        for (Button button : buttons) {
+            button.setDisable(false);
+        }
+    }
+
+    private static void disableButton(final Button... buttons) {
+        for (Button button : buttons) {
+            button.setDisable(true);
+        }
     }
 
     @Override
     public void start(final Stage stage) {
+        this.stage = stage;
+        initStage();
+        draw();
+    }
+
+    public List<File> getPickedFiles() {
+        return new ArrayList<>(this.listView.getItems());
+    }
+
+    public Set<File> getPickedFilesUnordered() {
+        return new HashSet<>(this.fileCache);
+    }
+
+
+    public int addFiles(final Collection<File> files) {
+        final List<File> toAdd = new ArrayList<>(files.size());
+        for (File file : files) {
+            if (fileCache.add(file)) {
+                toAdd.add(file);
+            }
+        }
+        listView.getItems().addAll(toAdd);
+        analyseState();
+        evaluateState();
+        return toAdd.size();
+    }
+
+    public int removeFiles(final Collection<File> files) {
+        final List<File> removed = new ArrayList<>(files);
+        for (File file : files) {
+            if (this.fileCache.remove(file)) {
+                removed.add(file);
+            }
+        }
+        listView.getItems().removeAll(removed);
+        analyseState();
+        evaluateState();
+        return removed.size();
+    }
+
+    public void clearFiles() {
+        this.fileCache.clear();
+        listView.getItems().clear();
+        this.selectionState = SelectionState.EMPTY;
+        // No need to analyse the state
+        evaluateState();
+    }
+
+    public void moveCursor(int amount) {
+        if (amount == 0 || listView.getItems().isEmpty()) {
+            return;
+        }
+        final int selectedIndex = listView.getSelectionModel().getSelectedIndex();
+        final MultipleSelectionModel<File> selectionModel = listView.getSelectionModel();
+        final int newIndex;
+        // Extract common if-else when evaluating newIndex
+        this.selectionState = null;
+        if (amount < 0) {
+            newIndex = Math.max(0, selectedIndex + amount);
+            if (newIndex == 0) {
+                this.selectionState = SelectionState.FIRST_SELECTED;
+            }
+        } else {
+            newIndex = Math.min(listView.getItems().size() - 1, selectedIndex + amount);
+            if (newIndex == listView.getItems().size() - 1) {
+                this.selectionState = SelectionState.LAST_SELECTED;
+            }
+        }
+        this.selectionState = this.selectionState == null ? SelectionState.ELEMENT_SELECTED : this.selectionState;
+        selectionModel.select(newIndex);
+        // No need to analyse the state
+        evaluateState();
+    }
+
+    public void evaluateCursorClick() {
+        final List<File> list = listView.getItems();
+        if (list.isEmpty()) {
+            this.selectionState = SelectionState.EMPTY;
+            evaluateState();
+            return;
+        }
+        final MultipleSelectionModel<File> selectionModel = listView.getSelectionModel();
+        if (selectionModel.getSelectedItems().size() == list.size()) {
+            this.selectionState = SelectionState.ALL_SELECTED;
+            evaluateState();
+            return;
+        }
+        final List<File> selected = selectionModel.getSelectedItems();
+        final int selectedIndex = selectionModel.getSelectedIndex();
+        if (selectedIndex == 0) {
+            this.selectionState = selected.size() == 1 ? SelectionState.FIRST_SELECTED : SelectionState.MULTI_FIRST_SELECTED;
+        } else if (selectedIndex == list.size() - 1) {
+            this.selectionState = selected.size() == 1 ? SelectionState.LAST_SELECTED : SelectionState.MULTI_LAST_SELECTED;
+        } else {
+            this.selectionState = SelectionState.MULTI_SELECTED;
+        }
+        evaluateState();
+    }
+
+    private void draw() {
         stage.setTitle("Add Extended Essays");
+        stage.setScene(new Scene(rootGroup));
+        stage.show();
+    }
 
-        final VBox listBox = new VBox();
-        final Label listLabel = new Label("Selected EEs");
-        listLabel.setAlignment(Pos.CENTER);
-        listLabel.setPadding(new Insets(10, 0, 10, 0));
-        final ListView<File> listView = new ListView<>();
-        listView.getItems().addAll(files);
-        listView.setPrefSize(100, 300);
-        listBox.getChildren().addAll(listLabel, listView);
+    private void initStage() {
+        initView();
+        initLogic();
+        evaluateState();
+    }
 
-        final Button buttonAdd = new Button("Add");
-        final Button buttonRemove = new Button("Delete");
-        final Button buttonMoveUp = new Button("Move Up");
-        final Button buttonMoveDown = new Button("Move Down");
-        final Button buttonClearSel = new Button("Clear Selection");
-
-        buttonAdd.setTextFill(Color.BLACK);
-        buttonRemove.setTextFill(Color.BLACK);
-        buttonMoveUp.setTextFill(Color.BLACK);
-        buttonMoveDown.setTextFill(Color.BLACK);
-        buttonClearSel.setTextFill(Color.BLACK);
-
-        buttonAdd.setMaxWidth(Double.MAX_VALUE);
-        buttonRemove.setMaxWidth(Double.MAX_VALUE);
-        buttonMoveUp.setMaxWidth(Double.MAX_VALUE);
-        buttonMoveDown.setMaxWidth(Double.MAX_VALUE);
-        buttonClearSel.setMaxWidth(Double.MAX_VALUE);
-
-        final TilePane paneEditFiles = new TilePane();
-        paneEditFiles.setPadding(new Insets(0, 20, 10, 20));
-        paneEditFiles.setVgap(10);
-        paneEditFiles.setAlignment(Pos.CENTER);
-        paneEditFiles.setOrientation(Orientation.VERTICAL);
-        paneEditFiles.getChildren().addAll(buttonAdd, buttonRemove, buttonMoveUp, buttonMoveDown, buttonClearSel);
-
-        final Label status = new Label(" ");
+    private void initLogic() {
 
         buttonClearSel.setOnAction(event -> {
-            listView.getItems().clear();
-            this.files.clear();
-            this.fileCache.clear();
-            status.setTextFill(Color.GREEN);
-            status.setText("Selection cleared!");
+            clearFiles();
+            displayInfo(Color.GREEN, "Selection cleared!");
             event.consume();
         });
-        final Label info = new Label("Select files by dragging and dropping or importing.");
-        info.setTextFill(Color.BLACK);
 
-        buttonAdd.setOnMouseClicked(event -> {
+        buttonAdd.setOnAction(event -> {
             final FileChooser chooser = new FileChooser();
             configureFileChooser(chooser);
             final List<File> files = chooser.showOpenMultipleDialog(stage);
-            int added = 0;
-            if (files != null) {
-                for (File f : files) {
-                    if (!fileCache.contains(f)) {
-                        this.files.add(f);
-                        listView.getItems().add(f);
-                        added++;
-                    }
-                }
-                this.fileCache.addAll(files);
-                status.setTextFill(Color.GREEN);
-                status.setText(String.format("%d Files added!", added));
-            }
+            int added = files == null ? 0 : addFiles(files);
             if (added == 0) {
-                status.setTextFill(Color.BLACK);
-                status.setText("No Files Added");
+                displayInfo(Color.BLACK, "No files added");
             } else {
-                status.setTextFill(Color.GREEN);
-                status.setText(String.format("%d Files added!", added));
-                enableButton(buttonClearSel);
+                displayInfo(Color.GREEN, String.format("%d files added!", added));
             }
             event.consume();
         });
@@ -131,115 +210,229 @@ public class Picker extends Application {
                 return;
             }
             //assert selection != null && !selection.isEmpty();
-            final int lastSelIndex = listView.getSelectionModel().getSelectedIndex();
-            final int firstSelIndex = lastSelIndex - selection.size();
-            this.files.removeAll(selection);
-            this.fileCache.removeAll(selection);
-            listView.getItems().removeAll(selection);
-            status.setTextFill(Color.GREEN);
-            status.setText(String.format("%d Files removed!", selection.size()));
-            if (firstSelIndex == 0) {
-                listView.getSelectionModel().selectFirst();
-            } else {
-                listView.getSelectionModel().select(firstSelIndex);
-            }
+            int removed = removeFiles(selection);
+            displayInfo(Color.GREEN, String.format("%d Files removed!", removed));
+
             event.consume();
         });
 
         buttonMoveUp.setOnMouseClicked(event -> {
-            final int index;
-            final int firstRow = 0;
-            if (listView.getSelectionModel().getSelectionMode() == SelectionMode.SINGLE) {
-                index = listView.getSelectionModel().getSelectedIndex();
-            } else {
-                index = listView.getSelectionModel().getSelectedIndices().stream().min(Integer::compareTo).orElse(0);
-            }
-            if (index == 0) {
-                event.consume();
-                return;
-            }
             int toMove = event.isShiftDown() ? 10 : 1;
-            listView.getSelectionModel().select(Math.max(firstRow, index - toMove));
-            final int selectedIndex = listView.getSelectionModel().getSelectedIndex();
-            if (selectedIndex == 0) {
-                disableButton(buttonMoveUp);
-            } else {
-                enableButton(buttonMoveDown);
-            }
+            moveCursor(-toMove);
             event.consume();
+        });
+
+        buttonMoveUp.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                int toMove = event.isShiftDown() ? 10 : 1;
+                moveCursor(-toMove);
+                event.consume();
+            }
         });
 
         buttonMoveDown.setOnMouseClicked(event -> {
-            final int index;
-            int lastRow = this.files.size() - 1;
-            if (listView.getSelectionModel().getSelectionMode() == SelectionMode.SINGLE) {
-                index = listView.getSelectionModel().getSelectedIndex();
-            } else {
-                index = listView.getSelectionModel().getSelectedIndices().stream().max(Integer::compareTo).orElse(lastRow);
-            }
-            if (index == lastRow) {
-                event.consume();
-                return;
-            }
             int toMove = event.isShiftDown() ? 10 : 1;
-            listView.getSelectionModel().select(Math.min(lastRow, index + toMove));
-            final int selected = listView.getSelectionModel().getSelectedIndex();
-            if (selected == lastRow) {
-                disableButton(buttonMoveDown);
-            } else {
-                enableButton(buttonMoveUp);
-            }
+            moveCursor(toMove);
             event.consume();
+        });
+
+        buttonMoveDown.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                int toMove = event.isShiftDown() ? 10 : 1;
+                moveCursor(toMove);
+                event.consume();
+            }
         });
 
         listView.setOnMouseClicked(event -> {
-            final int index = listView.getSelectionModel().getSelectedIndex();
-            if (this.files.size() <= 1) {
-                disableButton(buttonMoveUp);
-                disableButton(buttonMoveDown);
-                event.consume();
-                return;
-            }
-            if (index == 0) {
-                disableButton(buttonMoveUp);
-                enableButton(buttonMoveDown);
-            } else if (index == this.files.size() - 1) {
-                disableButton(buttonMoveDown);
-                enableButton(buttonMoveUp);
+            final MultipleSelectionModel<File> selectionModel = listView.getSelectionModel();
+            if (event.isShiftDown()) {
+                selectionModel.setSelectionMode(SelectionMode.MULTIPLE);
             } else {
-                enableButton(buttonMoveUp);
-                enableButton(buttonMoveDown);
+                selectionModel.setSelectionMode(SelectionMode.SINGLE);
             }
+            evaluateCursorClick();
             event.consume();
         });
 
-        if (this.files.isEmpty()) {
-            disableButton(buttonRemove);
-            disableButton(buttonMoveDown);
-            disableButton(buttonMoveUp);
-            disableButton(buttonClearSel);
-        }
+        listView.setOnKeyPressed(event -> {
+            final MultipleSelectionModel<File> selectionModel = listView.getSelectionModel();
+            final SelectionMode mode = selectionModel.getSelectionMode();
+            if (event.isShiftDown()) {
+                selectionModel.setSelectionMode(SelectionMode.MULTIPLE);
+            } else {
+                switch (event.getCode()) {
+                    case UP:
+                    case DOWN:
+                        selectionModel.setSelectionMode(SelectionMode.SINGLE);
+                    default:
+                        break;
+                }
+            }
+            analyseState();
+            evaluateState();
+            event.consume();
+        });
 
-        final VBox rootGroup = new VBox(12);
-        final GridPane pane = new GridPane();
+        listView.setOnDragOver(event -> {
+            final Dragboard dragboard = event.getDragboard();
+            for (File file : dragboard.getFiles()) {
+                // Make sure we don't already have the file
+                if (fileCache.contains(file)) {
+                    event.acceptTransferModes();
+                    event.consume();
+                    return;
+                }
+            }
+            event.acceptTransferModes(TransferMode.COPY_OR_MOVE);
+            event.consume();
+        });
+
+        listView.setOnDragDropped(event -> {
+            final Dragboard dragboard = event.getDragboard();
+            List<File> files = dragboard.getFiles();
+            int added = files == null ? 0 : addFiles(files);
+            if (added == 0) {
+                displayInfo(Color.BLACK, "No files added");
+            } else {
+                displayInfo(Color.GREEN, String.format("%d files added!", added));
+            }
+            event.setDropCompleted(true);
+            event.consume();
+        });
+
+    }
+
+    private void initView() {
+        info.setTextFill(Color.BLACK);
+
+        // Init ListView
+        listLabel.setAlignment(Pos.CENTER);
+        listLabel.setPadding(new Insets(10, 0, 10, 0));
+        listView.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        listBox.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        listBox.getChildren().addAll(listLabel, listView);
+
+        // Init button colours
+        buttonAdd.setTextFill(Color.BLACK);
+        buttonRemove.setTextFill(Color.BLACK);
+        buttonMoveUp.setTextFill(Color.BLACK);
+        buttonMoveDown.setTextFill(Color.BLACK);
+        buttonClearSel.setTextFill(Color.BLACK);
+
+        // Init button sizes
+        buttonAdd.setMaxWidth(Double.MAX_VALUE);
+        buttonRemove.setMaxWidth(Double.MAX_VALUE);
+        buttonMoveUp.setMaxWidth(Double.MAX_VALUE);
+        buttonMoveDown.setMaxWidth(Double.MAX_VALUE);
+        buttonClearSel.setMaxWidth(Double.MAX_VALUE);
+
+        // Init pane for buttons
+        paneEditFiles.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        paneEditFiles.setPadding(new Insets(40, 20, 10, 20));
+        paneEditFiles.setVgap(10);
+        paneEditFiles.setAlignment(Pos.TOP_CENTER);
+        paneEditFiles.setOrientation(Orientation.VERTICAL);
+        paneEditFiles.getChildren().addAll(buttonAdd, buttonRemove, buttonMoveUp, buttonMoveDown, buttonClearSel);
+
+
+        pane.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         pane.add(listBox, 0, 0);
         pane.add(paneEditFiles, 1, 0);
         pane.add(status, 0, 1);
         pane.add(info, 0, 2);
+
+        rootGroup.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         rootGroup.getChildren().add(pane);
         //rootGroup.getChildren().addAll(listBox, paneEditFiles, info);
         rootGroup.setPadding(new Insets(12, 12, 12, 12));
-        stage.setScene(new Scene(rootGroup));
-        stage.show();
     }
 
-
-    private void enableButton(final Button button) {
-        button.setDisable(false);
+    private void analyseState() {
+        final List<File> items = listView.getItems();
+        if (items.isEmpty()) {
+            this.selectionState = SelectionState.EMPTY;
+            return;
+        }
+        final MultipleSelectionModel<File> selectionModel = listView.getSelectionModel();
+        if (selectionModel.getSelectedItems().isEmpty()) {
+            this.selectionState = SelectionState.NULL_CURSOR;
+            return;
+        }
+        if (selectionModel.getSelectedItems().size() == listView.getItems().size()) {
+            this.selectionState = SelectionState.ALL_SELECTED;
+            return;
+        }
+        final int selectedIndex = selectionModel.getSelectedIndex();
+        if (selectionModel.getSelectionMode() == SelectionMode.MULTIPLE) {
+            if (selectedIndex == 0 || selectionModel.getSelectedIndices().contains(0)) {
+                this.selectionState = SelectionState.MULTI_FIRST_SELECTED;
+            } else if (selectedIndex == items.size() - 1 || selectionModel.getSelectedIndices().contains(items.size() - 1)) {
+                this.selectionState = SelectionState.MULTI_LAST_SELECTED;
+            } else {
+                this.selectionState = SelectionState.MULTI_SELECTED;
+            }
+            return;
+        }
+        if (selectedIndex == 0) {
+            this.selectionState = SelectionState.FIRST_SELECTED;
+        } else if (selectedIndex == items.size() - 1) {
+            this.selectionState = SelectionState.LAST_SELECTED;
+        } else {
+            this.selectionState = SelectionState.ELEMENT_SELECTED;
+        }
     }
 
-    private void disableButton(final Button button) {
-        button.setDisable(true);
+    private void evaluateState() {
+        final List<File> inView = listView.getItems();
+        if (inView.isEmpty()) {
+            disableButton(buttonMoveUp, buttonMoveDown, buttonRemove, buttonClearSel);
+        } else {
+            enableButton(buttonClearSel);
+        }
+        if (!listView.getSelectionModel().getSelectedItems().isEmpty()) {
+            enableButton(buttonRemove);
+        } else {
+            disableButton(buttonRemove);
+        }
+        switch (this.selectionState) {
+            case NULL_CURSOR:
+                // Cannot move around, cannot remove
+                enableButton(buttonAdd);
+                disableButton(buttonMoveDown, buttonMoveUp, buttonRemove);
+            case EMPTY:
+                // Cannot clear selection
+                disableButton(buttonClearSel);
+                break;
+            case ALL_SELECTED:
+                // Cannot move up or down
+                disableButton(buttonMoveDown, buttonMoveUp);
+                break;
+            case FIRST_SELECTED:
+            case MULTI_FIRST_SELECTED:
+                // Cannot move up
+                enableButton(buttonMoveDown);
+                disableButton(buttonMoveUp);
+                break;
+            case LAST_SELECTED:
+            case MULTI_LAST_SELECTED:
+                // Cannot move down
+                enableButton(buttonMoveUp);
+                disableButton(buttonMoveDown);
+            default:
+                // Do nothing
+                break;
+        }
+    }
+
+    private void displayInfo(final Color color, final String message) {
+        info.setText(" ");
+        info.setTextFill(color);
+        info.setText(message);
+    }
+
+    private enum SelectionState {
+        EMPTY, NULL_CURSOR, ELEMENT_SELECTED, FIRST_SELECTED, LAST_SELECTED, MULTI_SELECTED, MULTI_FIRST_SELECTED, MULTI_LAST_SELECTED, ALL_SELECTED
     }
 
 }

@@ -1,32 +1,33 @@
 package me.andrewandy.eesearcher.ui;
 
 
+import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.ListView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.stage.Stage;
 import me.andrewandy.eesearcher.SearchHistoryController;
 import me.andrewandy.eesearcher.SubjectDatabase;
 
-public class GuestHomepage {
+public class GuestHomepage extends Application {
 
     private static final Border DEF_BORDER = new Border(new BorderStroke(Color.BLACK,
             BorderStrokeStyle.SOLID, CornerRadii.EMPTY, BorderWidths.DEFAULT));
 
+    private Stage stage;
     private SubjectDatabase subjectDatabase;
     private Pane pane;
     private SearchHistoryController historyController;
 
-    public GuestHomepage() {
-
+    public static void main(String[] args) {
+        launch(args);
     }
 
-    public Pane getPane() {
-        if (pane == null) {
-            init();
-        }
-        return pane;
+    @Override
+    public void start(Stage primaryStage) throws Exception {
+        this.stage = primaryStage;
     }
 
     public void init() {
