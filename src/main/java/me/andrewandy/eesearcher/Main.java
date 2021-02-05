@@ -1,9 +1,6 @@
 package me.andrewandy.eesearcher;
 
-import me.andrewandy.eesearcher.ui.FileImporter;
-import me.andrewandy.eesearcher.ui.LegacyPicker;
-import me.andrewandy.eesearcher.ui.LoginWindow;
-import me.andrewandy.eesearcher.ui.Picker;
+import me.andrewandy.eesearcher.ui.*;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -27,6 +24,10 @@ public class Main {
         return HEART_BEAT;
     }
 
+    public static boolean isPrimaryThread() {
+        return Thread.currentThread() == HEART_BEAT;
+    }
+
     public static void main(String[] args) {
         if (HEART_BEAT != null) {
             HEART_BEAT = Thread.currentThread();
@@ -39,11 +40,24 @@ public class Main {
             }
         }
         switch (window.toLowerCase(Locale.ENGLISH)) {
-            case "loginwindow" -> LoginWindow.main(args);
-            case "picker" -> Picker.main(args);
-            case "legacypicker" -> LegacyPicker.main(args);
-            case "fileimporter" -> FileImporter.main(args);
-            default -> System.out.printf("Unknown arg 'window': %s", window);
+            case "loginwindow":
+                LoginWindow.main(args);
+                break;
+            case "picker":
+                Picker.main(args);
+                break;
+            case "legacypicker":
+                LegacyPicker.main(args);
+                break;
+            case "fileimporter":
+                FileImporter.main(args);
+                break;
+            case "guesthomepage":
+                GuestHomepage.main(args);
+                break;
+            default:
+                System.out.printf("Unknown arg 'window': %s", window);
+                break;
         }
     }
 

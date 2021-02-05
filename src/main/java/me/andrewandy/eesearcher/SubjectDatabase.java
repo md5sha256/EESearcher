@@ -68,7 +68,12 @@ public final class SubjectDatabase implements Serializable {
 
     private static void validateGroup(final byte group) {
         switch (group) {
-            case 1, 2, 3, 4, 5, 6:
+            case 1:
+            case 2:
+            case 3:
+            case 4:
+            case 5:
+            case 6:
                 return;
             default:
                 throw new IllegalArgumentException("Invalid Group: " + group);
