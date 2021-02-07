@@ -51,7 +51,6 @@ public class MainApplication extends Application {
         if (HEART_BEAT != null) {
             HEART_BEAT = Thread.currentThread();
         }
-        primaryStage.close();
         final Injector injector = Guice.createInjector(com.google.inject.Stage.PRODUCTION, new BackendModule(), new FrontendModule(primaryStage));
         final GuestHomepage homepage = injector.getInstance(GuestHomepage.class);
         homepage.draw();
