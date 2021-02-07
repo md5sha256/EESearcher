@@ -1,4 +1,4 @@
-package me.andrewandy.eesearcher;
+package me.andrewandy.eesearcher.data;
 
 public final class Subjects {
 

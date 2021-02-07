@@ -1,10 +1,12 @@
 package me.andrewandy.eesearcher.ui;
 
-import javafx.application.Application;
+import com.google.inject.Inject;
+import com.google.inject.Injector;
+import com.google.inject.Singleton;
+import com.google.inject.name.Named;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
-import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
@@ -15,11 +17,13 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import me.andrewandy.eesearcher.IndexDataController;
 
 import java.io.File;
 import java.util.*;
 
-public class Picker extends Application {
+@Singleton
+public class Picker {
 
     // Cached so we have O(1) lookup times as opposed to a ListView#getItems's O(n) lookup
     private final Set<File> fileCache = new HashSet<>();
@@ -34,19 +38,31 @@ public class Picker extends Application {
     private final Button buttonMoveUp = new Button("Move Up");
     private final Button buttonMoveDown = new Button("Move Down");
     private final Button buttonClearSel = new Button("Clear Selection");
+    private final Button buttonBack = new Button("Previous Page");
     private final TilePane paneEditFiles = new TilePane();
     private final Label listLabel = new Label("Selected EEs");
     private final Label status = new Label(" ");
     private final Label info = new Label("Select files by dragging and dropping or importing.");
 
-    // Lazy init for when #start is called
-    private Stage stage;
+    private final Stage stage;
+    private final SceneController sceneController;
 
+    private Runnable toPreviousPage = () -> {
+    };
+
+    @Inject
+    private IndexDataController dataController;
+    @Inject
+    private Injector injector;
     // Stateful variables
     private SelectionState selectionState = SelectionState.EMPTY;
 
-    public static void main(String[] args) {
-        launch(args);
+    @Inject
+    public Picker(@Named("main") Stage stage, final SceneController controller) {
+        this.stage = stage;
+        this.sceneController = controller;
+        initStage();
+        sceneController.init(this, rootGroup);
     }
 
     private static void configureFileChooser(final FileChooser fileChooser) {
@@ -55,7 +71,6 @@ public class Picker extends Application {
         fileChooser.getExtensionFilters().addAll(new FileChooser.ExtensionFilter("PDF", "*.pdf"),
                 new FileChooser.ExtensionFilter("All Files", "*.*"));
     }
-
 
     private static void enableButton(final Button... buttons) {
         for (Button button : buttons) {
@@ -69,11 +84,8 @@ public class Picker extends Application {
         }
     }
 
-    @Override
-    public void start(final Stage stage) {
-        this.stage = stage;
-        initStage();
-        draw();
+    public void setToPreviousPage(Runnable toPreviousPage) {
+        this.toPreviousPage = toPreviousPage;
     }
 
     public List<File> getPickedFiles() {
@@ -170,10 +182,9 @@ public class Picker extends Application {
         evaluateState();
     }
 
-    private void draw() {
+    public void draw() {
+        sceneController.setSceneFrom(this);
         stage.setTitle("Add Extended Essays");
-        stage.setScene(new Scene(rootGroup));
-        stage.show();
     }
 
     private void initStage() {
@@ -183,6 +194,11 @@ public class Picker extends Application {
     }
 
     private void initLogic() {
+
+        buttonBack.setOnAction(event -> {
+            toPreviousPage.run();
+            event.consume();
+        });
 
         buttonClearSel.setOnAction(event -> {
             clearFiles();
@@ -341,6 +357,7 @@ public class Picker extends Application {
         pane.add(paneEditFiles, 1, 0);
         pane.add(status, 0, 1);
         pane.add(info, 0, 2);
+        pane.add(buttonBack, 0, 3);
 
         rootGroup.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         rootGroup.getChildren().add(pane);

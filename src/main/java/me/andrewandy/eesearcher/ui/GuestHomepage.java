@@ -1,7 +1,10 @@
 package me.andrewandy.eesearcher.ui;
 
 
-import javafx.application.Application;
+import com.google.inject.Inject;
+import com.google.inject.Injector;
+import com.google.inject.Singleton;
+import com.google.inject.name.Named;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -15,29 +18,19 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 import javafx.stage.Stage;
-import jfxtras.styles.jmetro.JMetro;
-import jfxtras.styles.jmetro.Style;
-import me.andrewandy.eesearcher.SearchController;
+import me.andrewandy.eesearcher.IndexDataController;
 import me.andrewandy.eesearcher.SearchHistoryController;
-import me.andrewandy.eesearcher.SubjectDatabase;
-import me.andrewandy.eesearcher.data.EEIndexData;
+import me.andrewandy.eesearcher.data.IndexData;
+import me.andrewandy.eesearcher.data.QueryParameters;
+import me.andrewandy.eesearcher.data.SearchResult;
+import me.andrewandy.eesearcher.data.SubjectDatabase;
 import org.jetbrains.annotations.NotNull;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.regex.Pattern;
+import java.util.Optional;
 
-public class GuestHomepage extends Application {
-
-    private static final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
-
-    private static final Border DEF_BORDER = new Border(new BorderStroke(Color.BLACK,
-            BorderStrokeStyle.SOLID, CornerRadii.EMPTY, BorderWidths.DEFAULT));
-
+@Singleton
+public class GuestHomepage {
 
     private final VBox root = new VBox();
     private final HBox boxInfo = new HBox();
@@ -46,21 +39,37 @@ public class GuestHomepage extends Application {
     private final SplitPane paneCentralView = new SplitPane();
     private final TitledPane paneSearchHistory = new TitledPane();
 
-    private final TreeView<Hyperlink> viewSearchHistory = new TreeView<>(new TreeItem<>());
+    private final ListView<Hyperlink> viewSearchHistory = new ListView<>();
     private final TextField fieldSearchInput = new TextField(" ");
-    private final TitledPane paneSearchResults = new TitledPane();
-    private final TreeView<TextFlow> viewSearchResults = new TreeView<>(new TreeItem<>());
-    private final SearchController searchController = new SearchController();
-    private final SearchHistoryController historyController = new SearchHistoryController();
+    private final TitledPane paneSearchResultsParent = new TitledPane();
+    private final ScrollPane paneSearchResults = new ScrollPane();
+    private final TextFlow flowSearchResults = new TextFlow();
+    private final Button importerButton = new Button("Add EEs");
 
-    private Stage stage;
+    private final Stage stage;
+
+
+    private final SceneController sceneController;
+    @Inject
     private SubjectDatabase subjectDatabase;
+    @Inject
+    private Injector injector;
+    @Inject
+    private IndexDataController indexDataController;
+    @Inject
+    private SearchHistoryController historyController;
+
+
     private boolean searching;
 
-
-    public static void main(String[] args) {
-        launch(args);
+    @Inject
+    public GuestHomepage(@Named("main") Stage stage, @NotNull SceneController controller) {
+        this.stage = stage;
+        this.sceneController = controller;
+        initStage();
+        controller.init(this, root);
     }
+
 
     private static void changeFontWeight(final Text text, final FontWeight weight) {
         final Font original = text.getFont();
@@ -68,21 +77,18 @@ public class GuestHomepage extends Application {
         text.setFont(newFont);
     }
 
-    @Override
-    public void start(Stage primaryStage) {
-        this.stage = primaryStage;
-        initStage();
-        draw();
+    private static void incrementFontWeight(final Text text, final FontWeight fontWeight, final float sizeIncrement) {
+        final Font original = text.getFont();
+        final Font newFont = Font.font(original.getFamily(), fontWeight, original.getSize() + sizeIncrement);
+        text.setFont(newFont);
     }
 
+
     public void draw() {
+        //rootJMetro.setScene(scene);
+        sceneController.setSceneFrom(this);
         this.stage.setTitle("Extended Essay Searcher");
-        JMetro jMetro = new JMetro(Style.LIGHT);
-        final Scene scene = new Scene(this.root);
-        jMetro.setScene(scene);
-        jMetro.reApplyTheme();
-        stage.setScene(scene);
-        this.stage.show();
+        stage.show();
     }
 
     public void initStage() {
@@ -97,11 +103,16 @@ public class GuestHomepage extends Application {
             }
             event.consume();
         });
+        importerButton.setOnAction(event -> {
+            final Picker picker = injector.getInstance(Picker.class);
+            picker.setToPreviousPage(this::draw);
+            picker.draw();
+            event.consume();
+        });
+
     }
 
     public void initView() {
-        stage.setResizable(true);
-
         // Init root
         root.setPadding(new Insets(12, 12, 12, 12));
         root.setSpacing(10);
@@ -112,34 +123,38 @@ public class GuestHomepage extends Application {
 
         /// Init search history display
         viewSearchHistory.setBackground(Background.EMPTY);
-        //viewSearchHistory.setBorder(DEF_BORDER);
         viewSearchHistory.setPadding(Insets.EMPTY);
         viewSearchHistory.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-
         // Init search history pane
-        paneSearchHistory.setText("Search History");
-        paneSearchHistory.setTextFill(Color.WHITE);
-        paneSearchHistory.setBackground(new Background(new BackgroundFill(Color.RED, new CornerRadii(5), Insets.EMPTY)));
+        final Label paneSearchHistoryLabel = new Label("Search History");
+        paneSearchHistoryLabel.setBackground(new Background(new BackgroundFill(Color.RED, CornerRadii.EMPTY, Insets.EMPTY)));
+        paneSearchHistoryLabel.setTextFill(Color.WHITE);
+        paneSearchHistory.setGraphic(paneSearchHistoryLabel);
+        paneSearchHistory.setText(" ");
         paneSearchHistory.setCollapsible(false);
         paneSearchHistory.setContent(viewSearchHistory);
         paneSearchHistory.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
 
-        viewSearchResults.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        flowSearchResults.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        flowSearchResults.setLineSpacing(1.5);
+        flowSearchResults.setPadding(new Insets(5, 5, 5, 5));
 
-        paneSearchResults.setText("Results");
-        paneSearchResults.setTextFill(Color.RED);
-        //paneSearchResults.setBorder(DEF_BORDER);
-        paneSearchResults.setCollapsible(false);
-        paneSearchResults.setContent(viewSearchResults);
         paneSearchResults.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        paneSearchResults.setContent(flowSearchResults);
+
+        paneSearchResultsParent.setText("Results");
+        paneSearchResultsParent.setTextFill(Color.RED);
+        paneSearchResultsParent.setCollapsible(false);
+        paneSearchResultsParent.setContent(paneSearchResults);
+        paneSearchResultsParent.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
 
 
         paneCentralView.setPadding(Insets.EMPTY);
-        paneCentralView.getItems().addAll(paneSearchHistory, paneSearchResults);
+        paneCentralView.getItems().addAll(paneSearchHistory, paneSearchResultsParent);
         paneCentralView.setDividerPositions(0.25f, 0.75f);
         paneCentralView.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
 
-        stage.heightProperty().addListener((obs, oldVal, newVal) -> {
+        this.root.heightProperty().addListener((obs, oldVal, newVal) -> {
             double[] positions = paneCentralView.getDividerPositions(); // reccord the current ratio
             Platform.runLater(() -> paneCentralView.setDividerPositions(positions)); // apply the now former ratio
         });
@@ -152,75 +167,74 @@ public class GuestHomepage extends Application {
         boxInfo.setSpacing(10);
         HBox.setHgrow(info, Priority.ALWAYS);
         HBox.setHgrow(progressBar, Priority.ALWAYS);
-        boxInfo.getChildren().addAll(info, progressBar);
+        boxInfo.getChildren().addAll(importerButton, info, progressBar);
         root.getChildren().addAll(fieldSearchInput, paneCentralView, boxInfo);
     }
 
     private void performSearch(@NotNull final String search) {
-        if (search.isBlank()) {
+        if (search.isBlank() || searching) {
             return;
         }
-        if (searching) {
+        final @NotNull Optional<@NotNull String> lastQuery = historyController.lastEntry();
+        if (lastQuery.isPresent() && lastQuery.get().contentEquals(search)) {
             return;
         }
         historyController.addEntry(search);
+        final Hyperlink hyperlink = new Hyperlink(search);
+        viewSearchHistory.getItems().add(0, hyperlink);
+
         info.setText("Searching... ");
         searching = true;
-        progressBar.setVisible(true);
         progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
-        final SearchController.SearchQuery query = new SearchController.SearchQuery(SearchController.SearchAttribute.TEXT,
-                // Force UTF 8
-                // Potential performance improvement if we can cache queries + lookup cached queries to see if they need to be made.
-                Pattern.compile(new String(search.getBytes(StandardCharsets.UTF_8)).toLowerCase(Locale.ROOT)));
-        searchController.performQuery(query).thenAccept(result -> Platform.runLater(() -> {
-            processSearchResultEntries(result);
+        progressBar.setVisible(true);
+        final QueryParameters parameters = QueryParameters.builder().regex("(" + search.trim() + ")").regexFlags('i').deepSearch(false).build();
+        indexDataController.performQuery(parameters).thenAccept(results -> Platform.runLater(() -> {
+            for (SearchResult result : results) {
+                processSearchResultEntries(result);
+            }
+            progressBar.setProgress(0);
             progressBar.setVisible(false);
             searching = false;
             info.setText(" ");
         }));
     }
 
-    private void processSearchResultEntries(@NotNull final SearchController.SearchResult result) {
+    private void processSearchResultEntries(@NotNull final SearchResult result) {
         final List<String> correctText = result.getMatchingText();
         // FIXME keyword highlighting
-        final EEIndexData indexData = result.getIndexData();
-        final Map<SearchController.SearchAttribute, String> attributes = result.getAttributes();
+        final IndexData indexData = result.getEssay().getIndexData();
         // Parse values
-        final String subject = attributes.get(SearchController.SearchAttribute.SUBJECT);
-        final String examSession = attributes.get(SearchController.SearchAttribute.EXAM_SESSION);
-        final String elementDisplayName = String.format("$1%s | $2%s", subject, examSession);
+        final String subject = indexData.getSubject().getDisplayName();
+        final String examSession = indexData.getExamSession().displayName;
+        final String elementDisplayName = String.format("%1$s | %2$s", subject, examSession);
         final String title = indexData.getTitle();
         final String researchQuestion = indexData.getResearchQuestion();
 
-        final TreeItem<TextFlow> rootItem = this.viewSearchResults.getRoot();
 
         // Begin adding elements to search history
-        final TreeItem<TextFlow> newItem = new TreeItem<>();
-        final TextFlow entryTitleFlow = new TextFlow();
-        final Text entryTitle = new Text(elementDisplayName);
-        changeFontWeight(entryTitle, FontWeight.BOLD);
-        newItem.setValue(entryTitleFlow);
+        final TextFlow newFlow = this.flowSearchResults;
 
-        final TreeItem<TextFlow> infoItem = new TreeItem<>();
-        final TextFlow entryInfoFlow = new TextFlow();
+        final Text entryTitle = new Text(elementDisplayName + System.lineSeparator());
+        entryTitle.setFill(Color.DARKGREEN);
+        incrementFontWeight(entryTitle, FontWeight.BOLD, 4);
+
         final Text textEssayTitleIdentifier = new Text("Title: ");
         changeFontWeight(textEssayTitleIdentifier, FontWeight.BOLD);
         textEssayTitleIdentifier.setFill(Color.DARKGRAY);
-        final Text textEssayTitle = new Text(title + "\n");
+        final Text textEssayTitle = new Text(title + System.lineSeparator());
+        changeFontWeight(textEssayTitle, FontWeight.NORMAL);
         final Text textEssayRQIdentifier = new Text("Research Question: ");
+        textEssayRQIdentifier.setFill(Color.DARKGRAY);
         changeFontWeight(textEssayRQIdentifier, FontWeight.BOLD);
-        final Text textRQ = new Text(researchQuestion + "\n");
-        entryInfoFlow.getChildren().addAll(textEssayTitleIdentifier, textEssayTitle, textEssayRQIdentifier, textRQ);
+        final Text textRQ = new Text(researchQuestion + System.lineSeparator());
+        changeFontWeight(textRQ, FontWeight.NORMAL);
+        newFlow.getChildren().addAll(entryTitle, textEssayTitleIdentifier, textEssayTitle, textEssayRQIdentifier, textRQ);
         for (String s : correctText) {
-            entryInfoFlow.getChildren().add(new Text(s + "\n"));
+            newFlow.getChildren().add(new Text(s + System.lineSeparator()));
         }
-        infoItem.setValue(entryInfoFlow);
-        rootItem.getChildren().add(0, newItem);
+        if (correctText.isEmpty()) {
+            newFlow.getChildren().add(new Text(System.lineSeparator()));
+        }
     }
-
-    public void onSearchHistoryUpdate() {
-
-    }
-
 
 }

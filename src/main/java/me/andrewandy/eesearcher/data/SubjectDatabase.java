@@ -1,13 +1,7 @@
-package me.andrewandy.eesearcher;
+package me.andrewandy.eesearcher.data;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 public final class SubjectDatabase implements Serializable {
 
@@ -18,8 +12,23 @@ public final class SubjectDatabase implements Serializable {
     private final Map<Byte, Set<Subject>> groupSubjectMap = new HashMap<>();
 
     SubjectDatabase() {
-        for (int i = 1; i < 7; i++) {
+        for (int i = 0; i < 7; i++) {
             groupSubjectMap.put((byte) i, new HashSet<>());
+        }
+        unsafeRegisterSubject(Subject.WORLD_STUDIES);
+    }
+
+    private static void validateGroup(final byte group) {
+        switch (group) {
+            case 1:
+            case 2:
+            case 3:
+            case 4:
+            case 5:
+            case 6:
+                return;
+            default:
+                throw new IllegalArgumentException("Invalid Group: " + group);
         }
     }
 
@@ -66,21 +75,7 @@ public final class SubjectDatabase implements Serializable {
         unsafeRegisterSubject(subject);
     }
 
-    private static void validateGroup(final byte group) {
-        switch (group) {
-            case 1:
-            case 2:
-            case 3:
-            case 4:
-            case 5:
-            case 6:
-                return;
-            default:
-                throw new IllegalArgumentException("Invalid Group: " + group);
-        }
-    }
-
-    private void checkSubjectValidity(final Subject subject) throws IllegalArgumentException{
+    private void checkSubjectValidity(final Subject subject) throws IllegalArgumentException {
         if (isSubject(subject.getDisplayName())) {
             throw new IllegalArgumentException("Invalid Subject: " + subject.getDisplayName());
         }

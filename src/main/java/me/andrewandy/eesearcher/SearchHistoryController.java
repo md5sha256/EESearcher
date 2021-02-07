@@ -96,6 +96,15 @@ public class SearchHistoryController {
         }
     }
 
+    public @NotNull Optional<@NotNull String> lastEntry() {
+        synchronized (this.history) {
+            if (this.history.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(this.history.getLast());
+        }
+    }
+
     public void truncateHistory() {
         synchronized (this.history) {
             // Cache the max size as it may change, even if it probably won't
