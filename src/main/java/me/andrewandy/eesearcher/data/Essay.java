@@ -13,6 +13,7 @@ public class Essay implements AutoCloseable {
 
     public Essay(final IndexData indexData, final byte[] rawPDF) {
         this.indexData = indexData;
+        final PDDocument document;
         try {
             PDFParser parser = new PDFParser(new RandomAccessBuffer(rawPDF));
             parser.parse();

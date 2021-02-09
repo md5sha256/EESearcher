@@ -2,6 +2,7 @@ package me.andrewandy.eesearcher.ui;
 
 
 import com.google.inject.Inject;
+import com.google.inject.name.Named;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
@@ -13,6 +14,7 @@ public class SceneController {
 
     private final Map<Object, Scene> sceneMap = new WeakHashMap<>();
     @Inject
+    @Named("main")
     private Stage stage;
 
     public SceneController init(Object object, final Parent rootNode) {

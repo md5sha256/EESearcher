@@ -7,10 +7,6 @@ import java.util.Objects;
 
 public class ExamSessionConstraint {
 
-    public enum Type {
-        BEFORE, AFTER, ONLY;
-    }
-
     public final ExamSession examSession;
     public final Type type;
 
@@ -30,5 +26,9 @@ public class ExamSessionConstraint {
 
     public Type getType() {
         return type;
+    }
+
+    public enum Type {
+        BEFORE, AFTER, ONLY
     }
 }

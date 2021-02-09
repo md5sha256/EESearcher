@@ -4,8 +4,8 @@ import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
 import com.google.inject.name.Named;
-import com.google.inject.throwingproviders.CheckedProviders;
 import com.google.inject.throwingproviders.CheckedProvides;
+import com.google.inject.throwingproviders.ThrowingProviderBinder;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.pool.HikariPool;
 import me.andrewandy.eesearcher.IndexDataController;
@@ -13,11 +13,12 @@ import me.andrewandy.eesearcher.SearchHistoryController;
 import me.andrewandy.eesearcher.SystemConfiguration;
 import me.andrewandy.eesearcher.data.DataUtil;
 import me.andrewandy.eesearcher.data.Parser;
+import me.andrewandy.eesearcher.data.SubjectDatabase;
+import me.andrewandy.eesearcher.data.Subjects;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Paths;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -26,8 +27,11 @@ public class BackendModule extends AbstractModule {
 
     @Override
     protected void configure() {
+        ThrowingProviderBinder.forModule(this);
         bind(DataUtil.class).asEagerSingleton();
         bind(Parser.class).asEagerSingleton();
+        bind(SubjectDatabase.class).asEagerSingleton();
+        bind(Subjects.class).asEagerSingleton();
         bind(IndexDataController.class).asEagerSingleton();
         bind(SearchHistoryController.class).asEagerSingleton();
     }
@@ -36,7 +40,8 @@ public class BackendModule extends AbstractModule {
     @Singleton
     @Named("internal-config")
     public @NotNull File provideConfigFile() {
-        return Paths.get("").resolve("backend.properties").toFile();
+        final File file = new File(getClass().getProtectionDomain().getCodeSource().getLocation().getFile()).getParentFile();
+        return new File(file, "backend.properties");
     }
 
     @Provides
@@ -56,7 +61,7 @@ public class BackendModule extends AbstractModule {
         config.setPassword(systemConfiguration.databasePassword());
         config.setJdbcUrl("jdbc:h2://" + systemConfiguration.databasePath().getAbsolutePath());
         config.setPoolName("backend-pool");
-        config.setMaximumPoolSize(systemConfiguration.maxIOThreads() + 1);
+        config.setMaximumPoolSize(systemConfiguration.maxIOThreads() == -1 ? Runtime.getRuntime().availableProcessors() : systemConfiguration.maxIOThreads());
         return config;
     }
 
@@ -70,6 +75,6 @@ public class BackendModule extends AbstractModule {
     @Provides
     @Singleton
     public ScheduledExecutorService provideExecutorService(@NotNull final SystemConfiguration configuration) {
-        return Executors.newScheduledThreadPool(configuration.maxIOThreads());
+        return Executors.newScheduledThreadPool(configuration.maxIOThreads() == -1 ? Runtime.getRuntime().availableProcessors() : configuration.maxIOThreads());
     }
 }

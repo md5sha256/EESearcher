@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.google.inject.Singleton;
 import com.google.inject.name.Named;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
@@ -21,6 +22,7 @@ import me.andrewandy.eesearcher.IndexDataController;
 
 import java.io.File;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 @Singleton
 public class Picker {
@@ -39,13 +41,19 @@ public class Picker {
     private final Button buttonMoveDown = new Button("Move Down");
     private final Button buttonClearSel = new Button("Clear Selection");
     private final Button buttonBack = new Button("Previous Page");
+    private final Button buttonSubmit = new Button("Submit and Index");
     private final TilePane paneEditFiles = new TilePane();
     private final Label listLabel = new Label("Selected EEs");
+    private final VBox boxInfo = new VBox();
     private final Label status = new Label(" ");
     private final Label info = new Label("Select files by dragging and dropping or importing.");
+    private final ProgressBar progressBar = new ProgressBar(0);
 
     private final Stage stage;
     private final SceneController sceneController;
+
+    private boolean indexing = false;
+    private int indexingProgress = 0;
 
     private Runnable toPreviousPage = () -> {
     };
@@ -260,6 +268,20 @@ public class Picker {
             }
         });
 
+        buttonSubmit.setOnMouseClicked(event -> {
+            performIndexing();
+            disableButton(buttonSubmit);
+            event.consume();
+        });
+
+        buttonSubmit.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                performIndexing();
+                disableButton(buttonSubmit);
+            }
+            event.consume();
+        });
+
         listView.setOnMouseClicked(event -> {
             final MultipleSelectionModel<File> selectionModel = listView.getSelectionModel();
             if (event.isShiftDown()) {
@@ -273,7 +295,6 @@ public class Picker {
 
         listView.setOnKeyPressed(event -> {
             final MultipleSelectionModel<File> selectionModel = listView.getSelectionModel();
-            final SelectionMode mode = selectionModel.getSelectionMode();
             if (event.isShiftDown()) {
                 selectionModel.setSelectionMode(SelectionMode.MULTIPLE);
             } else {
@@ -335,6 +356,7 @@ public class Picker {
         buttonMoveUp.setTextFill(Color.BLACK);
         buttonMoveDown.setTextFill(Color.BLACK);
         buttonClearSel.setTextFill(Color.BLACK);
+        buttonSubmit.setTextFill(Color.BLACK);
 
         // Init button sizes
         buttonAdd.setMaxWidth(Double.MAX_VALUE);
@@ -342,6 +364,7 @@ public class Picker {
         buttonMoveUp.setMaxWidth(Double.MAX_VALUE);
         buttonMoveDown.setMaxWidth(Double.MAX_VALUE);
         buttonClearSel.setMaxWidth(Double.MAX_VALUE);
+        buttonSubmit.setMaxWidth(Double.MAX_VALUE);
 
         // Init pane for buttons
         paneEditFiles.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
@@ -349,20 +372,53 @@ public class Picker {
         paneEditFiles.setVgap(10);
         paneEditFiles.setAlignment(Pos.TOP_CENTER);
         paneEditFiles.setOrientation(Orientation.VERTICAL);
-        paneEditFiles.getChildren().addAll(buttonAdd, buttonRemove, buttonMoveUp, buttonMoveDown, buttonClearSel);
+        paneEditFiles.getChildren().addAll(buttonAdd, buttonRemove, buttonMoveUp, buttonMoveDown, buttonClearSel, buttonSubmit);
 
+        boxInfo.setSpacing(10);
+        boxInfo.getChildren().addAll(buttonBack, info, progressBar);
+        boxInfo.setPadding(new Insets(10, 0, 10, 0));
+        progressBar.setVisible(false);
 
         pane.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         pane.add(listBox, 0, 0);
         pane.add(paneEditFiles, 1, 0);
         pane.add(status, 0, 1);
         pane.add(info, 0, 2);
-        pane.add(buttonBack, 0, 3);
+        pane.add(boxInfo, 0, 3);
 
         rootGroup.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         rootGroup.getChildren().add(pane);
         //rootGroup.getChildren().addAll(listBox, paneEditFiles, info);
         rootGroup.setPadding(new Insets(12, 12, 12, 12));
+    }
+
+    private void performIndexing() {
+        if (this.indexing) {
+            throw new IllegalStateException("Already indexing!");
+        }
+        disableButton(buttonBack);
+        final List<File> items = new ArrayList<>(listView.getItems());
+        final List<File> successfulItems = new ArrayList<>();
+        final double size = items.size();
+        progressBar.setVisible(true);
+        final CompletableFuture<Void> future = dataController.performIndexing(items, (file, success) -> Platform.runLater(() -> {
+            final int done = ++indexingProgress;
+            progressBar.setProgress(done / size);
+            if (success) {
+                successfulItems.add(file);
+            }
+        }));
+        future.exceptionally((ex) -> {
+            ex.printStackTrace();
+            return null;
+        }).thenRun(() -> Platform.runLater(() -> {
+            this.indexingProgress = 0;
+            this.indexing = false;
+            listView.getItems().removeAll(successfulItems);
+            fileCache.removeAll(successfulItems);
+            progressBar.setVisible(false);
+            enableButton(buttonBack);
+        }));
     }
 
     private void analyseState() {
@@ -403,8 +459,13 @@ public class Picker {
     private void evaluateState() {
         final List<File> inView = listView.getItems();
         if (inView.isEmpty()) {
-            disableButton(buttonMoveUp, buttonMoveDown, buttonRemove, buttonClearSel);
+            disableButton(buttonMoveUp, buttonMoveDown, buttonRemove, buttonClearSel, buttonSubmit);
         } else {
+            if (indexing) {
+                disableButton(buttonSubmit);
+            } else {
+                enableButton(buttonSubmit);
+            }
             enableButton(buttonClearSel);
         }
         if (!listView.getSelectionModel().getSelectedItems().isEmpty()) {
@@ -451,5 +512,6 @@ public class Picker {
     private enum SelectionState {
         EMPTY, NULL_CURSOR, ELEMENT_SELECTED, FIRST_SELECTED, LAST_SELECTED, MULTI_SELECTED, MULTI_FIRST_SELECTED, MULTI_LAST_SELECTED, ALL_SELECTED
     }
+
 
 }

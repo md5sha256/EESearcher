@@ -7,17 +7,18 @@ import me.andrewandy.eesearcher.ExamSession;
 import org.apache.pdfbox.io.RandomAccessBuffer;
 import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.h2.Driver;
 import org.jetbrains.annotations.NotNull;
 
-import javax.sql.rowset.serial.SerialBlob;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.sql.*;
-import java.util.Base64;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
 
 public class DataUtil {
@@ -25,15 +26,17 @@ public class DataUtil {
     // %1
     public static final String TABLE_NAME = "EEData";
     // %2
-    public static final String COLUMN_TITLE = "title";
+    public static final String COLUMN_UUID = "hashcode";
     // %3
-    public static final String COLUMN_SUBJECT = "subject";
+    public static final String COLUMN_TITLE = "title";
     // %4
-    public static final String COLUMN_EXAM_YEAR = "exam_year";
+    public static final String COLUMN_SUBJECT = "subject";
     // %5
-    public static final String COLUMN_RESEARCH_QUESTION = "research_question";
+    public static final String COLUMN_EXAM_YEAR = "exam_year";
     // %6
-    public static final String COLUMN_PDF = "compressed_pdf";
+    public static final String COLUMN_RESEARCH_QUESTION = "research_question";
+    // %7
+    public static final String COLUMN_PDF = "pdf";
 
     @Inject
     @Named("internal-pool")
@@ -42,8 +45,6 @@ public class DataUtil {
     private Parser parser;
     @Inject
     private SubjectDatabase subjectDatabase;
-    @Inject
-    private ScheduledExecutorService executorService;
 
     private static String generateSqlConstraints(@NotNull QueryParameters parameters, int maxQueries) {
 
@@ -65,7 +66,7 @@ public class DataUtil {
         if (maxQueries == 0 || maxQueries < -1) {
             throw new IllegalArgumentException(String.format("Invalid MaxQueries: %d!", maxQueries));
         }
-        final StringJoiner flagJoiner = new StringJoiner(", ");
+        final StringJoiner flagJoiner = new StringJoiner(", ", "'", "'");
         for (char c : flags) {
             flagJoiner.add(String.valueOf(c));
         }
@@ -84,17 +85,20 @@ public class DataUtil {
         final StringJoiner constraint = new StringJoiner(" AND ");
 
         if (!pattern.isEmpty()) {
-            constraint.add("REGEX_LIKE(%2$s, " + pattern + ", " + appendedFlags + ")");
+            final StringJoiner orConstraint = new StringJoiner(" OR ");
+            orConstraint.add("REGEXP_LIKE(%3$s, " + pattern + ", " + appendedFlags + ")");
+            orConstraint.add("REGEXP_LIKE(%6$s, " + pattern + ", " + appendedFlags + ")");
+            constraint.add("( " + orConstraint.toString() + " )");
         }
         if (rawSubjects.length != 0) {
             final StringJoiner joiner = new StringJoiner(" OR ");
             for (String s : rawSubjects) {
-                joiner.add(" %3$s LIKE " + s);
+                joiner.add(" %4$s LIKE " + s);
             }
             constraint.add("(" + joiner.toString() + ")");
         }
         if (sessionConstraint != null) {
-            final String s = "WHERE " + COLUMN_EXAM_YEAR + " %1$s %2$d ";
+            final String s = "WHERE %1$s %2$s %3$d ";
             final String comparator;
             switch (sessionConstraint.type) {
                 case ONLY:
@@ -109,69 +113,73 @@ public class DataUtil {
                 default:
                     throw new IllegalStateException("Unknown session constraint: " + sessionConstraint.type);
             }
-            final String localConstraint = String.format(s, comparator, sessionConstraint.examSession.epochMilli);
+            final String localConstraint = String.format(s, COLUMN_EXAM_YEAR, comparator, sessionConstraint.examSession.epochMilli);
             constraint.add(localConstraint);
         }
 
         final String rawSql = base.append(constraint.toString()).append(limit).toString();
-        return String.format(rawSql, TABLE_NAME, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
+        final String format = String.format(rawSql, TABLE_NAME, COLUMN_UUID, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
+        System.out.println(format);
+        return format;
     }
 
-    private void initDatabase() throws SQLException {
+    public void initDatabase() throws SQLException {
+        Driver.load();
         try (Connection connection = pool.getConnection(); PreparedStatement init = initStatement(connection)) {
             init.execute();
         }
     }
 
     private @NotNull PreparedStatement initStatement(@NotNull final Connection connection) throws SQLException {
-        final String initTable = "CREATE TABLE IF NOT EXIST %1$s " +
-                "%2$s TEXT NOT NULL, " +
-                "%3$s TEXT NOT NULL, " +
-                "%4$s TEXT NOT NULL, " +
+        final String initTable = "CREATE TABLE IF NOT EXISTS %1$s (" +
+                "%2$s INT NOT NULL, " +
+                "%3$s VARCHAR NOT NULL, " +
+                "%4$s VARCHAR NOT NULL, " +
                 "%5$s BIGINT NOT NULL, " +
-                "%6$s BLOB NOT NULL, " +
-                "UNIQUE(%2$s, %3$s, %4$s, %5$s));";
-        final String initExamYearIndex = "CREATE INDEX IF NOT EXISTS %2$s_index ON %1$s " +
-                "(%2$s. %3$s, %4$s, %5$s, %6$s);";
-        final String initTitleIndex = "CREATE INDEX IF NOT EXISTS %3$s_index ON %1$s " +
-                "(%3$s, %2$s, %4$s, %5$s, %6$s);";
-        final String initResearchQuestionIndex = "CREATE INDEX IF NOT EXISTS %4$s_index ON %1$s " +
-                "(%4$s, %2$s, %3$s, %5$s, %6$s);";
-        final String initSubjectIndex = "CREATE INDEX IF NOT EXISTS %5$s_index ON %1$s " +
-                "(%5$s, %2$s, %3$s, %4$s, %6$s);";
+                "%6$s VARCHAR NOT NULL, " +
+                "%7$s BINARY NOT NULL, " +
+                "UNIQUE(%3$s, %4$s, %5$s, %6$s)," +
+                "PRIMARY KEY(%2$s)); ";
+        final String initUUIDIndex = "CREATE INDEX IF NOT EXISTS %2$s_index ON %1$s " +
+                "(%2$s, %3$s, %4$s, %5$s, %6$s); ";
+        final String initExamYearIndex = "CREATE INDEX IF NOT EXISTS %3$s_index ON %1$s " +
+                "(%3$s, %2$s, %4$s, %5$s, %6$s); ";
+        final String initTitleIndex = "CREATE INDEX IF NOT EXISTS %4$s_index ON %1$s " +
+                "(%4$s, %2$s, %3$s, %5$s, %6$s); ";
+        final String initResearchQuestionIndex = "CREATE INDEX IF NOT EXISTS %5$s_index ON %1$s " +
+                "(%5$s, %2$s, %3$s, %4$s, %6$s); ";
+        final String initSubjectIndex = "CREATE INDEX IF NOT EXISTS %6$s_index ON %1$s " +
+                "(%6$s, %2$s, %3$s, %4$s, %5$s); ";
 
-        final String sql = String.format(initTable + initExamYearIndex + initTitleIndex + initResearchQuestionIndex + initSubjectIndex,
-                TABLE_NAME, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
+        final String sql = String.format(initTable + initUUIDIndex + initExamYearIndex + initTitleIndex + initResearchQuestionIndex + initSubjectIndex,
+                TABLE_NAME, COLUMN_UUID, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
         return connection.prepareStatement(sql);
     }
 
     public @NotNull Essay extractEssay(@NotNull ResultSet resultSet, @NotNull Function<IndexData, Optional<Essay>> cacheResolver) throws SQLException, IOException {
-
-        final Blob blob = resultSet.getBlob(COLUMN_PDF);
-        assert blob != null;
-        final byte[] rawPDF = blob.getBytes(1L, (int) blob.length());
-
         final String rawSubject = resultSet.getString(COLUMN_SUBJECT);
         final Optional<Subject> optionalSubject = subjectDatabase.getSubjectByName(rawSubject);
-
+        final byte[] rawPDF = resultSet.getBytes(COLUMN_PDF);
         // Just parse parse / register the subject using the parser as the indices are clearly invalid.
         if (optionalSubject.isEmpty()) {
-            return parser.parseDocument(new PDFParser(new RandomAccessBuffer(rawPDF)));
+            final PDFParser pdfParser = new PDFParser(new RandomAccessBuffer(rawPDF));
+            pdfParser.parse();
+            return parser.parseDocument(pdfParser);
         }
-
         final Subject subject = optionalSubject.get();
         final String title = resultSet.getString(COLUMN_TITLE);
         final String researchQuestion = resultSet.getString(COLUMN_RESEARCH_QUESTION);
         final long examSession = resultSet.getLong(COLUMN_EXAM_YEAR);
         final ExamSession session = ExamSession.of(examSession);
         final IndexData indexData = new IndexData(title, subject, researchQuestion, session);
-        return new Essay(indexData, rawPDF);
+        final Optional<Essay> optionalEssay = cacheResolver.apply(indexData);
+        return optionalEssay.orElseGet(() -> new Essay(indexData, rawPDF));
     }
 
     public @NotNull PreparedStatement newSearch(@NotNull Connection connection, @NotNull QueryParameters parameters, int maxQueries) throws SQLException {
         final String constraint = generateSqlConstraints(parameters, maxQueries);
-        final String raw = "SELECT FROM %1$s (%2$s, %3$s, %4$s, %5$s, %6$s)" + constraint + ";";
-        final String sql = String.format(raw, TABLE_NAME, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
+        final String raw = "SELECT %3$s, %4$s, %5$s, %6$s, %7$s from %1$s" + constraint + ";";
+        final String sql = String.format(raw, TABLE_NAME, COLUMN_UUID, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
         return connection.prepareStatement(sql);
     }
 
@@ -180,18 +188,19 @@ public class DataUtil {
                                                final boolean includePDFData) throws SQLException {
         final IndexData data = essay.getIndexData();
         final String sql;
-        if (includePDFData) {
-            String s = "MERGE INTO %1$s (%2$s, %3$s, %4$s, %5$s) VALUES(?, ?, ?, ?, ?);";
-            sql = String.format(s, TABLE_NAME, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION);
+        if (!includePDFData) {
+            String s = "MERGE INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s) VALUES(?, ?, ?, ?, ?);";
+            sql = String.format(s, TABLE_NAME, COLUMN_UUID, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION);
         } else {
-            String s = "MERGE INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s) VALUES(?, ?, ?, ?, ?, ?);";
-            sql = String.format(s, TABLE_NAME, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
+            String s = "MERGE INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s) VALUES(?, ?, ?, ?, ?, ?);";
+            sql = String.format(s, TABLE_NAME, COLUMN_UUID, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
         }
         final PreparedStatement preparedStatement = connection.prepareStatement(sql);
-        preparedStatement.setString(1, data.getTitle());
-        preparedStatement.setString(2, data.getSubject().getDisplayName());
-        preparedStatement.setLong(3, data.getExamSession().epochMilli);
-        preparedStatement.setString(4, data.getResearchQuestion());
+        preparedStatement.setInt(1, data.getUniqueID());
+        preparedStatement.setString(2, data.getTitle());
+        preparedStatement.setString(3, data.getSubject().getDisplayName());
+        preparedStatement.setLong(4, data.getExamSession().epochMilli);
+        preparedStatement.setString(5, data.getResearchQuestion());
         if (includePDFData) {
             final PDDocument document = essay.getDocument();
             final ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -201,26 +210,23 @@ public class DataUtil {
                 // Should never happen!
                 throw new RuntimeException(ex);
             }
-            preparedStatement.setBlob(5, new SerialBlob(bos.toByteArray()));
+            preparedStatement.setBytes(6, bos.toByteArray());
         }
         return preparedStatement;
     }
 
     public @NotNull PreparedStatement newDeletion(@NotNull final Connection connection, @NotNull IndexData data) throws SQLException {
-        final String rawSql = "DELETE FROM %1$s WHERE %2$s=? AND %3$s=? AND %4$s=? AND %5$s;";
-        final String sql = String.format(rawSql, TABLE_NAME, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION);
+        final String rawSql = "DELETE FROM %1$s WHERE %2$s=?;";
+        final String sql = String.format(rawSql, TABLE_NAME, COLUMN_UUID);
         final PreparedStatement preparedStatement = connection.prepareStatement(sql);
-        preparedStatement.setString(1, data.getTitle());
-        preparedStatement.setString(2, data.getSubject().getDisplayName());
-        preparedStatement.setLong(3, data.getExamSession().epochMilli);
-        preparedStatement.setString(4, data.getResearchQuestion());
+        preparedStatement.setInt(1, data.getUniqueID());
         return preparedStatement;
     }
 
     public @NotNull PreparedStatement newDeletion(@NotNull final Connection connection,
                                                   @NotNull final QueryParameters parameters) throws SQLException {
         final String rawSQL = "DELETE FROM %1$s" + generateSqlConstraints(parameters, -1) + ";";
-        final String sql = String.format(rawSQL, TABLE_NAME, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION);
+        final String sql = String.format(rawSQL, TABLE_NAME, COLUMN_UUID, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION);
         return connection.prepareStatement(sql);
     }
 

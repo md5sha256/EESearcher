@@ -8,7 +8,6 @@ import com.google.inject.name.Named;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
@@ -27,7 +26,6 @@ import me.andrewandy.eesearcher.data.SubjectDatabase;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
-import java.util.Optional;
 
 @Singleton
 public class GuestHomepage {
@@ -47,9 +45,9 @@ public class GuestHomepage {
     private final Button importerButton = new Button("Add EEs");
 
     private final Stage stage;
-
-
     private final SceneController sceneController;
+    private final boolean allowRawRegex = true;
+
     @Inject
     private SubjectDatabase subjectDatabase;
     @Inject
@@ -99,7 +97,7 @@ public class GuestHomepage {
     public void initLogic() {
         fieldSearchInput.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.ENTER) {
-                performSearch(fieldSearchInput.getText());
+                performSearch(fieldSearchInput.getText(), allowRawRegex);
             }
             event.consume();
         });
@@ -109,6 +107,7 @@ public class GuestHomepage {
             picker.draw();
             event.consume();
         });
+        viewSearchHistory.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
 
     }
 
@@ -127,6 +126,8 @@ public class GuestHomepage {
         viewSearchHistory.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         // Init search history pane
         final Label paneSearchHistoryLabel = new Label("Search History");
+        final Font searchHistoryLabelFont = paneSearchHistoryLabel.getFont();
+        paneSearchHistoryLabel.setFont(Font.font(searchHistoryLabelFont.getFamily(), FontWeight.BOLD, searchHistoryLabelFont.getSize()));
         paneSearchHistoryLabel.setBackground(new Background(new BackgroundFill(Color.RED, CornerRadii.EMPTY, Insets.EMPTY)));
         paneSearchHistoryLabel.setTextFill(Color.WHITE);
         paneSearchHistory.setGraphic(paneSearchHistoryLabel);
@@ -144,6 +145,8 @@ public class GuestHomepage {
 
         paneSearchResultsParent.setText("Results");
         paneSearchResultsParent.setTextFill(Color.RED);
+        final Font searchResultsLabelFont = paneSearchResultsParent.getFont();
+        paneSearchResultsParent.setFont(Font.font(searchResultsLabelFont.getFamily(), FontWeight.BOLD, searchResultsLabelFont.getSize()));
         paneSearchResultsParent.setCollapsible(false);
         paneSearchResultsParent.setContent(paneSearchResults);
         paneSearchResultsParent.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
@@ -171,26 +174,35 @@ public class GuestHomepage {
         root.getChildren().addAll(fieldSearchInput, paneCentralView, boxInfo);
     }
 
-    private void performSearch(@NotNull final String search) {
+    private void performSearch(@NotNull final String search, boolean allowRawRegex) {
         if (search.isBlank() || searching) {
             return;
         }
-        final @NotNull Optional<@NotNull String> lastQuery = historyController.lastEntry();
-        if (lastQuery.isPresent() && lastQuery.get().contentEquals(search)) {
-            return;
+        final String regex;
+        if (allowRawRegex) {
+            regex = String.format("'(%s)'", search.trim());
+        } else {
+            regex = String.format("'\\Q(%s)\\E'", search.trim());
         }
-        historyController.addEntry(search);
+        viewSearchHistory.getItems().removeIf(hl -> hl.getText().equals(search));
+        historyController.removeEntry(search);
         final Hyperlink hyperlink = new Hyperlink(search);
+        hyperlink.setOnAction(event -> performSearch(search, allowRawRegex));
         viewSearchHistory.getItems().add(0, hyperlink);
-
+        historyController.addEntry(search);
         info.setText("Searching... ");
         searching = true;
         progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
         progressBar.setVisible(true);
-        final QueryParameters parameters = QueryParameters.builder().regex("(" + search.trim() + ")").regexFlags('i').deepSearch(false).build();
+        final QueryParameters parameters = QueryParameters.builder().regex(regex).regexFlags('i').deepSearch(false).build();
         indexDataController.performQuery(parameters).thenAccept(results -> Platform.runLater(() -> {
-            for (SearchResult result : results) {
-                processSearchResultEntries(result);
+            this.flowSearchResults.getChildren().clear();
+            if (results.isEmpty()) {
+                this.flowSearchResults.getChildren().add(new Text("No Results"));
+            } else {
+                for (SearchResult result : results) {
+                    processSearchResultEntries(result);
+                }
             }
             progressBar.setProgress(0);
             progressBar.setVisible(false);

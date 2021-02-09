@@ -47,6 +47,9 @@ public class ExamSession implements Comparable<ExamSession> {
     }
 
     public static ExamSession of(final long epochMilli) {
+        if (epochMilli == 0) {
+            return EMPTY_SESSION;
+        }
         final GregorianCalendar gregorianCalendar = new GregorianCalendar();
         gregorianCalendar.setTimeInMillis(epochMilli);
         final int year = gregorianCalendar.get(Calendar.YEAR);

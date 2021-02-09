@@ -1,9 +1,10 @@
 package me.andrewandy.eesearcher.data;
 
-import me.andrewandy.eesearcher.Utils;
-
 import java.io.Serializable;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public final class Subject implements Serializable {
@@ -34,7 +35,7 @@ public final class Subject implements Serializable {
             this.group = group;
         }
         this.isActive = isActive;
-        this.displayName = displayName.toUpperCase().equals(displayName) ? displayName : Utils.titleCase(displayName);
+        this.displayName = displayName;
         if (aliases != null) {
             this.aliases = Arrays.stream(aliases)
                     .filter(Objects::nonNull)
@@ -46,7 +47,7 @@ public final class Subject implements Serializable {
     }
 
     public Subject(final byte group, final String displayName, boolean isActive, final String... aliases) {
-       this(true, group, displayName, isActive, aliases);
+        this(true, group, displayName, isActive, aliases);
     }
 
     public boolean isActive() {
@@ -70,6 +71,17 @@ public final class Subject implements Serializable {
             return false;
         }
         return this.displayName.equalsIgnoreCase(name) || this.aliases.contains(name.toLowerCase());
+    }
+
+    @Override
+    public String toString() {
+        return "Subject{" +
+                "isActive=" + isActive +
+                ", group=" + group +
+                ", displayName='" + displayName + '\'' +
+                ", aliases=" + aliases +
+                ", hash=" + hash +
+                '}';
     }
 
     @Override

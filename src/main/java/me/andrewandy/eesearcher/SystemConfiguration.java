@@ -27,8 +27,8 @@ public class SystemConfiguration {
     private final Properties properties = new Properties();
     private String databaseUsername = "username";
     private String databasePassword = "password";
-    private File databasePath = Paths.get("").resolve("data.db").toFile();
-    private int maxIO = 1;
+    private File databasePath = new File(new File(getClass().getProtectionDomain().getCodeSource().getLocation().getFile()).getParent(), "data.db");
+    private int maxIO = -1;
 
     public SystemConfiguration() {
     }

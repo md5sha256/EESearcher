@@ -4,12 +4,14 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import javafx.application.Application;
 import javafx.stage.Stage;
+import me.andrewandy.eesearcher.data.DataUtil;
 import me.andrewandy.eesearcher.module.BackendModule;
 import me.andrewandy.eesearcher.module.FrontendModule;
 import me.andrewandy.eesearcher.ui.GuestHomepage;
 import me.andrewandy.eesearcher.ui.LegacyPicker;
 import me.andrewandy.eesearcher.ui.LoginWindow;
 
+import java.sql.SQLException;
 import java.util.Locale;
 
 public class MainApplication extends Application {
@@ -52,8 +54,18 @@ public class MainApplication extends Application {
             HEART_BEAT = Thread.currentThread();
         }
         final Injector injector = Guice.createInjector(com.google.inject.Stage.PRODUCTION, new BackendModule(), new FrontendModule(primaryStage));
+        initBackend(injector);
         final GuestHomepage homepage = injector.getInstance(GuestHomepage.class);
         homepage.draw();
+    }
+
+    private void initBackend(Injector injector) {
+        final DataUtil dataUtil = injector.getInstance(DataUtil.class);
+        try {
+            dataUtil.initDatabase();
+        } catch (SQLException ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
 }

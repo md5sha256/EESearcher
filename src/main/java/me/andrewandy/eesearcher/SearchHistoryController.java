@@ -14,7 +14,9 @@ import java.util.*;
 public class SearchHistoryController {
 
     private final LinkedList<String> history = new LinkedList<>();
-    public volatile int HISTORY_MAX_SIZE = 30;
+
+    private transient final Set<String> cache = new HashSet<>();
+    public volatile transient int HISTORY_MAX_SIZE = 30;
 
     public synchronized void save(final File file) throws IOException {
         final LinkedList<String> copy;
@@ -54,8 +56,10 @@ public class SearchHistoryController {
             synchronized (this.history) {
                 if (!mergeData) {
                     this.history.clear();
+                    this.cache.clear();
                 }
                 this.history.addAll((LinkedList<String>) linkedList);
+                this.cache.addAll(this.history);
             }
             truncateHistory();
         } catch (ClassNotFoundException ex) {
@@ -76,6 +80,7 @@ public class SearchHistoryController {
                 if (s == null) {
                     continue;
                 }
+                this.cache.add(s);
                 this.history.add(s);
             }
         }
@@ -83,7 +88,9 @@ public class SearchHistoryController {
 
     public void addEntry(final String entry) {
         synchronized (this.history) {
-            this.history.add(Objects.requireNonNull(entry));
+            final String added = Objects.requireNonNull(entry).toLowerCase(Locale.ROOT);
+            this.history.add(added);
+            this.cache.add(added);
         }
     }
 
@@ -92,7 +99,17 @@ public class SearchHistoryController {
             if (this.history.isEmpty()) {
                 return Optional.empty();
             }
+            final String removed = this.history.remove();
+            this.cache.remove(removed);
             return Optional.of(this.history.remove());
+        }
+    }
+
+    public void removeEntry(@NotNull String entry) {
+        synchronized (this.history) {
+            if (this.cache.remove(entry)) {
+                this.history.remove(entry);
+            }
         }
     }
 
@@ -105,6 +122,13 @@ public class SearchHistoryController {
         }
     }
 
+    public boolean containsEntry(@NotNull String entry) {
+        synchronized (this.history) {
+            // Cache should be locked in parallel with history
+            return this.cache.contains(entry.toLowerCase(Locale.ROOT));
+        }
+    }
+
     public void truncateHistory() {
         synchronized (this.history) {
             // Cache the max size as it may change, even if it probably won't
@@ -114,6 +138,7 @@ public class SearchHistoryController {
             }
             final Iterator<String> descendingIterator = this.history.descendingIterator();
             for (int toRemove = this.history.size() - maxSize; toRemove > 0; toRemove--) {
+                this.cache.remove(descendingIterator.next());
                 descendingIterator.remove();
             }
         }

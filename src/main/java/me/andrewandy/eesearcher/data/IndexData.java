@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 
 public class IndexData {
 
+    public final int uniqueID;
     private final Subject subject;
     private final String researchQuestion;
     private final String title;
@@ -18,6 +19,11 @@ public class IndexData {
         this.title = title;
         this.researchQuestion = researchQuestion;
         this.examSession = examSession;
+        this.uniqueID = hashCode();
+    }
+
+    public int getUniqueID() {
+        return uniqueID;
     }
 
     public Subject getSubject() {
@@ -34,6 +40,16 @@ public class IndexData {
 
     public ExamSession getExamSession() {
         return examSession;
+    }
+
+    @Override
+    public String toString() {
+        return "IndexData{" +
+                "subject=" + subject +
+                ", researchQuestion='" + researchQuestion + '\'' +
+                ", title='" + title + '\'' +
+                ", examSession=" + examSession +
+                '}';
     }
 
     @Override
