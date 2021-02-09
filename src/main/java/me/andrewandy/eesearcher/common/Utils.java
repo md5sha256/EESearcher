@@ -1,4 +1,4 @@
-package me.andrewandy.eesearcher;
+package me.andrewandy.eesearcher.common;
 
 import java.io.File;
 import java.io.FileInputStream;

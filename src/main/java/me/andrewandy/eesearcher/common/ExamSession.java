@@ -1,4 +1,4 @@
-package me.andrewandy.eesearcher;
+package me.andrewandy.eesearcher.common;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -6,7 +6,7 @@ import java.time.Month;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 
-public class ExamSession implements Comparable<ExamSession> {
+public final class ExamSession implements Comparable<ExamSession> {
 
     public static final ExamSession EMPTY_SESSION = new ExamSession();
     public static final long EMPTY_EPOCH_MILLI = EMPTY_SESSION.epochMilli;

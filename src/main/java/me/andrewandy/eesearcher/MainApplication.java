@@ -8,15 +8,11 @@ import me.andrewandy.eesearcher.data.DataUtil;
 import me.andrewandy.eesearcher.module.BackendModule;
 import me.andrewandy.eesearcher.module.FrontendModule;
 import me.andrewandy.eesearcher.ui.GuestHomepage;
-import me.andrewandy.eesearcher.ui.LegacyPicker;
-import me.andrewandy.eesearcher.ui.LoginWindow;
 
 import java.sql.SQLException;
-import java.util.Locale;
 
-public class MainApplication extends Application {
+public final class MainApplication extends Application {
 
-    private static String cliWindow;
     private static Thread HEART_BEAT;
 
     public static Thread getHeartBeat() {
@@ -28,24 +24,7 @@ public class MainApplication extends Application {
     }
 
     public static void main(String[] args) {
-        String window = "null";
-        for (int i = 0; i < args.length; i++) {
-            if (args[i].equalsIgnoreCase("-w") && i + 1 < args.length) {
-                window = args[i + 1];
-                break;
-            }
-        }
-        cliWindow = window;
-        switch (window.toLowerCase(Locale.ENGLISH)) {
-            case "loginwindow":
-                LoginWindow.main(args);
-                break;
-            case "legacypicker":
-                LegacyPicker.main(args);
-                break;
-            default:
-                launch(args);
-        }
+        launch(args);
     }
 
     @Override
@@ -55,10 +34,15 @@ public class MainApplication extends Application {
         }
         final Injector injector = Guice.createInjector(com.google.inject.Stage.PRODUCTION, new BackendModule(), new FrontendModule(primaryStage));
         initBackend(injector);
+        // Draw the homepage
         final GuestHomepage homepage = injector.getInstance(GuestHomepage.class);
         homepage.draw();
     }
 
+    /**
+     * Initialize the backend.
+     * @param injector The injector to use for initializing
+     */
     private void initBackend(Injector injector) {
         final DataUtil dataUtil = injector.getInstance(DataUtil.class);
         try {

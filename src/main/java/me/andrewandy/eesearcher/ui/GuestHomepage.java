@@ -17,7 +17,7 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 import javafx.stage.Stage;
-import me.andrewandy.eesearcher.IndexDataController;
+import me.andrewandy.eesearcher.common.IndexDataController;
 import me.andrewandy.eesearcher.SearchHistoryController;
 import me.andrewandy.eesearcher.data.IndexData;
 import me.andrewandy.eesearcher.data.QueryParameters;
@@ -27,6 +27,15 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
+/**
+ * Represents the landing page users will see. This class will draw a window which contains:
+ *  - A text input field (search box)
+ *  - A ListView (search history)
+ *  - A ListView (search results)
+ *  - A button (Add EEs)
+ *
+ * @see ImportPage
+ */
 @Singleton
 public class GuestHomepage {
 
@@ -102,9 +111,9 @@ public class GuestHomepage {
             event.consume();
         });
         importerButton.setOnAction(event -> {
-            final Picker picker = injector.getInstance(Picker.class);
-            picker.setToPreviousPage(this::draw);
-            picker.draw();
+            final ImportPage importPage = injector.getInstance(ImportPage.class);
+            importPage.setToPreviousPage(this::draw);
+            importPage.draw();
             event.consume();
         });
         viewSearchHistory.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);

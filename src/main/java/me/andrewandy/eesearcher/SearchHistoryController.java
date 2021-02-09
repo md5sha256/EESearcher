@@ -13,11 +13,27 @@ import java.util.*;
 @Singleton
 public class SearchHistoryController {
 
+    /**
+     * Represents the actual search history terms
+     */
     private final LinkedList<String> history = new LinkedList<>();
 
+    /**
+     * Mirrors {@link #history} in order to speed up lookup times to O(1)
+     */
     private transient final Set<String> cache = new HashSet<>();
+
+    /**
+     * Max size of the history before values will be truncated
+     */
     public volatile transient int HISTORY_MAX_SIZE = 30;
 
+    /**
+     * Save the history to a file
+     *
+     * @param file The {@link File} to save to
+     * @throws IOException Thrown if there was an error writing the values to disk
+     */
     public synchronized void save(final File file) throws IOException {
         final LinkedList<String> copy;
         synchronized (this.history) {
@@ -29,6 +45,15 @@ public class SearchHistoryController {
         }
     }
 
+    /**
+     * Load the history from a file
+     *
+     * @param file      The {@link File} to read from
+     * @param mergeData Whether the current history should be merged with the
+     *                  history loaded from disk
+     * @throws IOException Thrown if there is an error in loading the data from disk
+     */
+    @SuppressWarnings("unchecked")
     public synchronized void loadData(final File file, boolean mergeData) throws IOException {
         final LinkedList<String> serial;
         try (FileInputStream fis = new FileInputStream(file);
@@ -68,11 +93,24 @@ public class SearchHistoryController {
         }
     }
 
+    /**
+     * Get a copy of the currently search history. Changes to this list
+     * will not be reflected in this controller and vice versa.
+     *
+     * @return Returns a {@link List} representing the search queries.
+     */
     public @NotNull List<@NotNull String> getHistory() {
-        return new ArrayList<>(this.history);
+        synchronized (this.history) {
+            return new ArrayList<>(this.history);
+        }
     }
 
-    public void offerHistory(final @NotNull List<@NotNull String> history) {
+    /**
+     * Append values to the search history
+     *
+     * @param history The history to append
+     */
+    public void offerHistory(@NotNull final List<@NotNull String> history) {
         synchronized (this.history) {
             this.history.clear();
             for (String s : history) {
@@ -86,7 +124,12 @@ public class SearchHistoryController {
         }
     }
 
-    public void addEntry(final String entry) {
+    /**
+     * Add an entry to the search history
+     *
+     * @param entry The string entry
+     */
+    public void addEntry(@NotNull final String entry) {
         synchronized (this.history) {
             final String added = Objects.requireNonNull(entry).toLowerCase(Locale.ROOT);
             this.history.add(added);
@@ -94,7 +137,13 @@ public class SearchHistoryController {
         }
     }
 
-    public @NotNull Optional<@NotNull String> removeEntry() {
+    /**
+     * Remove the first entry
+     *
+     * @return Returns an {@link Optional} populated with the removed value, empty
+     * if the search history is empty.
+     */
+    public @NotNull Optional<@NotNull String> removeFirstEntry() {
         synchronized (this.history) {
             if (this.history.isEmpty()) {
                 return Optional.empty();
@@ -105,14 +154,27 @@ public class SearchHistoryController {
         }
     }
 
-    public void removeEntry(@NotNull String entry) {
+    /**
+     * Remove a specified entry from the search history
+     *
+     * @param entry The entry to remove.
+     * @return Returns whether the search history changed as a result of the deletion
+     */
+    public boolean removeEntry(@NotNull String entry) {
         synchronized (this.history) {
             if (this.cache.remove(entry)) {
-                this.history.remove(entry);
+                return this.history.remove(entry);
             }
+            return false;
         }
     }
 
+    /**
+     * Get the last entry from search history
+     *
+     * @return Returns an {@link Optional} which is populated by the search entry, empty
+     * if the search history is empty
+     */
     public @NotNull Optional<@NotNull String> lastEntry() {
         synchronized (this.history) {
             if (this.history.isEmpty()) {
@@ -122,6 +184,13 @@ public class SearchHistoryController {
         }
     }
 
+    /**
+     * Check whether a specified entry exists within the search history
+     *
+     * @param entry The entry to check against
+     * @return Returns true if the lowercase version of the entry is in the
+     * search history
+     */
     public boolean containsEntry(@NotNull String entry) {
         synchronized (this.history) {
             // Cache should be locked in parallel with history
@@ -129,6 +198,9 @@ public class SearchHistoryController {
         }
     }
 
+    /**
+     * Truncate the history if ihe size exceeds {@link #HISTORY_MAX_SIZE}
+     */
     public void truncateHistory() {
         synchronized (this.history) {
             // Cache the max size as it may change, even if it probably won't

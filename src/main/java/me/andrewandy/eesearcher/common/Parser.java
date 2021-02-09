@@ -1,8 +1,11 @@
-package me.andrewandy.eesearcher.data;
+package me.andrewandy.eesearcher.common;
 
 import com.google.inject.Inject;
-import me.andrewandy.eesearcher.ExamSession;
-import me.andrewandy.eesearcher.Utils;
+import com.google.inject.Singleton;
+import me.andrewandy.eesearcher.data.Essay;
+import me.andrewandy.eesearcher.data.IndexData;
+import me.andrewandy.eesearcher.data.Subject;
+import me.andrewandy.eesearcher.data.SubjectDatabase;
 import org.apache.pdfbox.io.RandomAccessBuffer;
 import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -18,8 +21,16 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class Parser {
+/**
+ * Represents a parser of {@link Essay}s. All methods in this class are thread-safe and
+ * can be called from multiple threads.
+ */
+@Singleton
+public final class Parser {
 
+    /**
+     * Regular expressions to match specific characteristics of an Extended Essay
+     */
     private static final Pattern LINE_SEPARATOR = Pattern.compile(System.lineSeparator() + "|^\\s*$");
     private static final Pattern SUBJECT_PARSER = Pattern.compile("(Subject:)\\s?(\\w*|\\s)($|\\.|\\s+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern RESEARCH_QUESTION_PATTERN = Pattern.compile("(Research Question:)");
@@ -32,6 +43,17 @@ public class Parser {
     @Inject
     private SubjectDatabase database;
 
+    /**
+     * Attempt to parse an essay from a given {@link PDFParser}. This method heavily utilizes
+     * regular expressions, it is strongly advised for the max stack size to be increased depending on
+     * how much text is on each cover page. For an average of 50-100 words on an A4 sized cover page a
+     * stack size of around 2MB should be sufficient.
+     *
+     * @param parser The PDF parser instance
+     * @return Returns an {@link Essay} representing the given PDF
+     * @throws IOException              Thrown if an error occurs when parsing the PDF into plaintext
+     * @throws IllegalArgumentException Thrown if no Subject, Title or Research Question could be found.
+     */
     public Essay parseDocument(final PDFParser parser) throws IOException, IllegalArgumentException {
         final List<String> pages = parseTextByPage(parser);
         final String coverPage = pages.get(0);
@@ -40,6 +62,7 @@ public class Parser {
             throw new IllegalArgumentException("Invalid Essay: No subject found!");
         }
 
+        // Look for a title
         final Matcher titleMatcher = TITLE_PARSER.matcher(coverPage);
         String title = null;
         if (!titleMatcher.find()) {
@@ -58,31 +81,36 @@ public class Parser {
             title = titleMatcher.group(5).trim();
         }
 
+        // Look for a research question
         final Matcher rqMatcher = RESEARCH_QUESTION_PARSER.matcher(coverPage);
         if (!rqMatcher.find()) {
             throw new IllegalArgumentException("Invalid Essay: No title/topic found!");
         }
         final String rawResearchQuestion = rqMatcher.group();
+        // Strip "Research Question:" from the parsed string if present.
         final String researchQuestion = RESEARCH_QUESTION_PATTERN.matcher(rawResearchQuestion).replaceAll("").trim();
 
-
         final String rawSubject = subjectMatcher.group(2).trim();
-
+        // Check if subject is a language
         final Matcher languageMatcher = LANGUAGE_PATTERN.matcher(rawSubject);
         final Subject subject;
         if (languageMatcher.find()) {
             final String language = languageMatcher.group(1).trim();
+            // Lookup subject from in-memory SubjectDatabase
             final Optional<Subject> optional = database.getSubjectByName(language);
             subject = optional.orElseGet(() -> {
+                // Generate a new Subject
                 final Subject newSubject = new Subject((byte) 1, Utils.titleCase(language.toLowerCase(Locale.ROOT)), true);
                 database.registerSubject(newSubject);
                 return newSubject;
             });
         } else {
+            // If not a language, subject should be pre-initialized into the SubjectDatabase
             subject = database.getSubjectByName(rawSubject).orElseThrow(() -> new IllegalArgumentException(String.format("Invalid Subject: %s", rawSubject)));
         }
         final ExamSession session;
         final Matcher sessionMatcher = EXAM_SESSION_PARSER.matcher(coverPage);
+        // Attempt to identify the exam session
         if (sessionMatcher.find()) {
             final String rawMonth = sessionMatcher.group(2).trim();
             final String rawYear = sessionMatcher.group(3).trim();
@@ -92,13 +120,16 @@ public class Parser {
                 int year = Integer.parseInt(rawYear);
                 temp = ExamSession.of(month, year);
             } catch (IllegalArgumentException ex) {
+                // If error in parsing, fall back to the empty session
                 temp = ExamSession.EMPTY_SESSION;
             }
             session = temp;
         } else {
+            // If none found, fall back to empty session
             session = ExamSession.EMPTY_SESSION;
         }
-        final IndexData data = new IndexData(title, subject, researchQuestion, session);
+        // Initialize index data and returns a new essay instance
+        final IndexData data = IndexData.from(title, subject, researchQuestion, session);
         return new Essay(data, parser.getPDDocument());
     }
 

@@ -1,6 +1,6 @@
 package me.andrewandy.eesearcher.data;
 
-import me.andrewandy.eesearcher.ExamSession;
+import me.andrewandy.eesearcher.common.ExamSession;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Objects;

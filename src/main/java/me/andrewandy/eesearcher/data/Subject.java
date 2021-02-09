@@ -7,6 +7,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Represents an IB Subject and can be serialized.
+ * This class is immutable by nature and is therefore
+ * thread-safe.
+ */
 public final class Subject implements Serializable {
 
     public static final Subject WORLD_STUDIES = new Subject(false, (byte) 0, "World Studies", true);

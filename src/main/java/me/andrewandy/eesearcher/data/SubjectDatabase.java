@@ -1,13 +1,24 @@
 package me.andrewandy.eesearcher.data;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+/**
+ * Represents a cache of all {@link Subject} which are known.
+ * This class is thread safe.
+ */
 public final class SubjectDatabase implements Serializable {
 
-    private final List<Subject> subjects = new ArrayList<>();
-    private final List<Subject> activeSubjects = new ArrayList<>();
-    private final List<Subject> inActiveSubjects = new ArrayList<>();
+    // Non-fair sync as we expect much more reads than writes
+    private final ReentrantReadWriteLock parentLock = new ReentrantReadWriteLock(false);
+
+    private final Set<Subject> subjects = new HashSet<>();
+    private final Set<Subject> activeSubjects = new HashSet<>();
+    private final Set<Subject> inActiveSubjects = new HashSet<>();
     private final Map<String, Subject> displayNameMap = new HashMap<>();
     private final Map<Byte, Set<Subject>> groupSubjectMap = new HashMap<>();
 
@@ -32,38 +43,68 @@ public final class SubjectDatabase implements Serializable {
         }
     }
 
-    public Optional<Subject> getSubjectByName(final String name) {
-        return Optional.ofNullable(displayNameMap.get(name)).or(() -> {
-            for (Subject s : subjects) {
-                if (s.isSubject(name)) {
-                    return Optional.of(s);
+    public @NotNull Optional<@NotNull Subject> getSubjectByName(final String name) {
+        final Lock readLock = parentLock.readLock();
+        try {
+            readLock.lock();
+            return Optional.ofNullable(displayNameMap.get(name)).or(() -> {
+                for (Subject s : subjects) {
+                    if (s.isSubject(name)) {
+                        return Optional.of(s);
+                    }
                 }
-            }
-            return Optional.empty();
-        });
+                return Optional.empty();
+            });
+        } finally {
+            readLock.unlock();
+        }
     }
 
     public Set<Subject> getSubjectsByName(final String name) {
+        final Lock readLock = parentLock.readLock();
         final Set<Subject> byName = new HashSet<>();
-        for (Subject s : subjects) {
-            if (s.isSubject(name)) {
-                byName.add(s);
+        try {
+            readLock.lock();
+            for (Subject s : subjects) {
+                if (s.isSubject(name)) {
+                    byName.add(s);
+                }
             }
+        } finally {
+            readLock.unlock();
         }
         return byName;
     }
 
     public Set<Subject> getSubjectsByGroup(final byte group) {
         validateGroup(group);
-        return new HashSet<>(groupSubjectMap.get(group));
+        final Lock lock = parentLock.readLock();
+        try {
+            lock.lock();
+            return new HashSet<>(groupSubjectMap.get(group));
+        } finally {
+            lock.unlock();
+        }
     }
 
-    public List<Subject> getActiveSubjects() {
-        return new ArrayList<>(activeSubjects);
+    public @NotNull List<@NotNull Subject> getActiveSubjects() {
+        final Lock lock = parentLock.readLock();
+        try {
+            lock.lock();
+            return new ArrayList<>(activeSubjects);
+        } finally {
+            lock.unlock();
+        }
     }
 
-    public List<Subject> getInActiveSubjects() {
-        return new ArrayList<>(inActiveSubjects);
+    public @NotNull List<@NotNull Subject> getInActiveSubjects() {
+        final Lock lock = parentLock.readLock();
+        try {
+            lock.lock();
+            return new ArrayList<>(inActiveSubjects);
+        } finally {
+            lock.unlock();
+        }
     }
 
     public boolean isSubject(final String name) {
@@ -71,24 +112,39 @@ public final class SubjectDatabase implements Serializable {
     }
 
     public void registerSubject(final Subject subject) throws IllegalArgumentException {
-        checkSubjectValidity(subject);
-        unsafeRegisterSubject(subject);
-    }
-
-    private void checkSubjectValidity(final Subject subject) throws IllegalArgumentException {
         if (isSubject(subject.getDisplayName())) {
             throw new IllegalArgumentException("Invalid Subject: " + subject.getDisplayName());
+        }
+        final Lock writeLock = parentLock.writeLock();
+        try {
+            writeLock.lock();
+            subjects.add(subject);
+            displayNameMap.put(subject.getDisplayName(), subject);
+            groupSubjectMap.get(subject.getGroup()).add(subject);
+            if (subject.isActive()) {
+                activeSubjects.add(subject);
+            } else {
+                inActiveSubjects.remove(subject);
+            }
+        } finally {
+            writeLock.unlock();
         }
     }
 
     private void unsafeRegisterSubject(final Subject subject) {
-        subjects.add(subject);
-        displayNameMap.put(subject.getDisplayName(), subject);
-        groupSubjectMap.get(subject.getGroup()).add(subject);
-        if (subject.isActive()) {
-            activeSubjects.add(subject);
-        } else {
-            inActiveSubjects.remove(subject);
+        final Lock writeLock = parentLock.writeLock();
+        try {
+            writeLock.lock();
+            subjects.add(subject);
+            displayNameMap.put(subject.getDisplayName(), subject);
+            groupSubjectMap.get(subject.getGroup()).add(subject);
+            if (subject.isActive()) {
+                activeSubjects.add(subject);
+            } else {
+                inActiveSubjects.remove(subject);
+            }
+        } finally {
+            writeLock.unlock();
         }
     }
 

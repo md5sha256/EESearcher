@@ -5,6 +5,9 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Represents a {@link SearchResult} from a query. This class is immutable.
+ */
 public class SearchResult {
 
     private final Essay essay;
@@ -19,7 +22,7 @@ public class SearchResult {
         return essay;
     }
 
-    public List<String> getMatchingText() {
-        return matchingText;
+    public @NotNull List<String> getMatchingText() {
+        return new ArrayList<>(this.matchingText);
     }
 }

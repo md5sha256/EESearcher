@@ -18,14 +18,25 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-import me.andrewandy.eesearcher.IndexDataController;
+import me.andrewandy.eesearcher.common.IndexDataController;
 
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Represents the page where users can import new EEs. This class will draw a window which contains:
+ * - A ListView (selected EEs)
+ * - A few buttons (to navigate the list)
+ * - A few buttons (to add or remove essay from the list)
+ * - A button to submit essays for indexing
+ * - A button to return to the homepage
+ * - A progress bar to indicate current progress
+ *
+ * @see GuestHomepage
+ */
 @Singleton
-public class Picker {
+public class ImportPage {
 
     // Cached so we have O(1) lookup times as opposed to a ListView#getItems's O(n) lookup
     private final Set<File> fileCache = new HashSet<>();
@@ -66,7 +77,7 @@ public class Picker {
     private SelectionState selectionState = SelectionState.EMPTY;
 
     @Inject
-    public Picker(@Named("main") Stage stage, final SceneController controller) {
+    public ImportPage(@Named("main") Stage stage, final SceneController controller) {
         this.stage = stage;
         this.sceneController = controller;
         initStage();

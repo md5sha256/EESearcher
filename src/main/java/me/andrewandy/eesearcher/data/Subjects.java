@@ -2,24 +2,27 @@ package me.andrewandy.eesearcher.data;
 
 import com.google.inject.Inject;
 
+/**
+ * Utility class, represents IB subjects that are not in Group 1 or Group 2
+ */
 public final class Subjects {
 
 
     // Group 1 (Language)
 
     // Group 2 (Language Acquisition)
+
+    // Group 3 (Individuals & Societies)
+    public final Subject HISTORY;
     public final Subject ECONOMICS;
     public final Subject BUSINESS_MANAGEMENT;
     public final Subject ITGS;
     public final Subject GEOGRAPHY;
-    public final Subject PHILOSPHY;
+    public final Subject PHILOSOPHY;
     public final Subject GLOBAL_POLITICS;
     public final Subject PSYCHOLOGY;
     public final Subject ANTHROPOLOGY;
     public final Subject WORLD_RELIGION;
-
-    // Group 3 (Individuals & Societies)
-    public final Subject HISTORY;
 
     // Group 4 (Sciences)
     public final Subject PHYSICS;
@@ -29,13 +32,19 @@ public final class Subjects {
     public final Subject SPORT_EXERCISE_HEALTH_SCIENCE;
     public final Subject DESIGN_TECH;
     // Group 5 (Mathematics)
+    public final Subject GENERIC_MATH;
     public final Subject MATH_AA_2020;
     public final Subject MATH_AI_2020;
     public final Subject MATH_STUDIES_2020;
 
-    private final SubjectDatabase registryInstance;
-
     // Group 6 (Arts)
+    private final Subject DANCE;
+    private final Subject FILM;
+    private final Subject MUSIC;
+    private final Subject THEATRE;
+    private final Subject VISUAL_ARTS;
+
+    private final SubjectDatabase registryInstance;
 
     @Inject
     public Subjects(SubjectDatabase database) {
@@ -45,7 +54,7 @@ public final class Subjects {
         BUSINESS_MANAGEMENT = group3("Business Management", true, "BM");
         ITGS = group3("ITGS", true, "Information Technology in Global Societies");
         GEOGRAPHY = group3("Geography", true, "Geo");
-        PHILOSPHY = group3("Philosophy", true);
+        PHILOSOPHY = group3("Philosophy", true);
         GLOBAL_POLITICS = group3("Global Politics", true, "Politics");
         PSYCHOLOGY = group3("Psychology", true, "Psych");
         ANTHROPOLOGY = group3("Anthropology", true, "Social and Cultural Anthropology");
@@ -58,15 +67,21 @@ public final class Subjects {
         SPORT_EXERCISE_HEALTH_SCIENCE = group4("Sport, Exercise and Health Science", true);
         DESIGN_TECH = group4("Design Technology", true, "DT", "Design Tech");
 
+        GENERIC_MATH = group5("Mathematics", true, "Math");
         MATH_AA_2020 = group5("Mathematics: Analysis and Approaches", true, "Math AA");
         MATH_AI_2020 = group5("Mathematics: Applications and Interpretation", true, "Math AI");
-        MATH_STUDIES_2020 = group5("Mathematics", true,
-                "Math Studies",
+        MATH_STUDIES_2020 = group5("Math Studies", true,
+
                 "Mathematics: Analysis and Approaches",
                 "Math AA",
                 "Mathematics: Applications and Interpretation",
-                "Math AI",
-                "Maths");
+                "Math AI");
+
+        FILM = group6("Film", true);
+        MUSIC = group6("Music", true);
+        DANCE = group6("Dance", true);
+        THEATRE = group6("Theatre", true);
+        VISUAL_ARTS = group6("Visual Arts", true,"VA");
 
     }
 

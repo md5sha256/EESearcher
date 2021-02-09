@@ -3,7 +3,8 @@ package me.andrewandy.eesearcher.data;
 import com.google.inject.Inject;
 import com.google.inject.name.Named;
 import com.zaxxer.hikari.pool.HikariPool;
-import me.andrewandy.eesearcher.ExamSession;
+import me.andrewandy.eesearcher.common.ExamSession;
+import me.andrewandy.eesearcher.common.Parser;
 import org.apache.pdfbox.io.RandomAccessBuffer;
 import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -21,6 +22,9 @@ import java.util.Set;
 import java.util.StringJoiner;
 import java.util.function.Function;
 
+/**
+ * Utility class which is used to setup the backend database.
+ */
 public class DataUtil {
 
     // %1
@@ -118,9 +122,7 @@ public class DataUtil {
         }
 
         final String rawSql = base.append(constraint.toString()).append(limit).toString();
-        final String format = String.format(rawSql, TABLE_NAME, COLUMN_UUID, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
-        System.out.println(format);
-        return format;
+        return String.format(rawSql, TABLE_NAME, COLUMN_UUID, COLUMN_TITLE, COLUMN_SUBJECT, COLUMN_EXAM_YEAR, COLUMN_RESEARCH_QUESTION, COLUMN_PDF);
     }
 
     public void initDatabase() throws SQLException {
@@ -171,7 +173,7 @@ public class DataUtil {
         final String researchQuestion = resultSet.getString(COLUMN_RESEARCH_QUESTION);
         final long examSession = resultSet.getLong(COLUMN_EXAM_YEAR);
         final ExamSession session = ExamSession.of(examSession);
-        final IndexData indexData = new IndexData(title, subject, researchQuestion, session);
+        final IndexData indexData = IndexData.from(title, subject, researchQuestion, session);
         final Optional<Essay> optionalEssay = cacheResolver.apply(indexData);
         return optionalEssay.orElseGet(() -> new Essay(indexData, rawPDF));
     }

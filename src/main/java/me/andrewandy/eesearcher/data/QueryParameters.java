@@ -9,6 +9,9 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Represents a parameters which are used to query the database for matching essays.
+ */
 public class QueryParameters {
 
     public final String regex;
@@ -17,7 +20,11 @@ public class QueryParameters {
     public final ExamSessionConstraint examSessionConstraint;
     public final Set<Subject> subjects;
 
-    private QueryParameters(@Nullable String regex, char[] flags, boolean deepSearch, @Nullable ExamSessionConstraint examSessionConstraint, @Nullable Set<Subject> subjects) {
+    private QueryParameters(@Nullable String regex,
+                            char[] flags,
+                            boolean deepSearch,
+                            @Nullable ExamSessionConstraint examSessionConstraint,
+                            @Nullable Set<Subject> subjects) {
         this.regex = regex;
         this.flags = flags;
         this.deepSearch = deepSearch;
@@ -25,14 +32,26 @@ public class QueryParameters {
         this.subjects = subjects;
     }
 
+    /**
+     * Obtain a new builder.
+     * @return Returns a new {@link Builder} instance
+     */
     public static @NotNull Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Convert this query into a builder
+     * @return Returns a new {@link Builder} instance populated with this query's parameters
+     */
     public @NotNull Builder toBuilder() {
         return new Builder(this);
     }
 
+    /**
+     * Represents an object to build a {@link QueryParameters} instance.
+     * This class is NOT thread safe.
+     */
     public static class Builder {
 
         private String regex;
@@ -92,7 +111,11 @@ public class QueryParameters {
             return this;
         }
 
-        public QueryParameters build() {
+        /**
+         * Build a {@link QueryParameters} instance using the configured values.
+         * @return Returns a new {@link QueryParameters} instance
+         */
+        public @NotNull QueryParameters build() {
             return new QueryParameters(regex, flags, deepSearch, examSessionConstraint, subjects);
         }
     }
